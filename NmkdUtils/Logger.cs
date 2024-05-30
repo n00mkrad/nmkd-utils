@@ -34,15 +34,7 @@ namespace NmkdUtils
             { Level.Error, "ERR" },
         };
 
-        private static int _maxLogTypeStrLen = 0;
-        private static int MaxLogTypeStrLength
-        {
-            get
-            {
-                if (_maxLogTypeStrLen == 0) _maxLogTypeStrLen = Enum.GetNames(typeof(Level)).Max(name => name.Length);
-                return _maxLogTypeStrLen;
-            }
-        }
+        private static readonly int _maxLogTypeStrLen = Enum.GetNames(typeof(Level)).Max(name => name.Length);
 
         static Logger()
         {
@@ -67,6 +59,14 @@ namespace NmkdUtils
         public static void LogConditional(object o, bool condition, Level level = Level.Info)
         {
             if (condition)
+            {
+                Log(o, level);
+            }
+        }
+
+        public static void LogConditional(object o, Func<bool> condition, Level level = Level.Info)
+        {
+            if (condition())
             {
                 Log(o, level);
             }
@@ -100,7 +100,7 @@ namespace NmkdUtils
             if ((int)level >= (int)ConsoleLogLevel)
             {
                 var lines = msg.SplitIntoLines();
-                string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(MaxLogTypeStrLength, '.')}]" : $"[{_logLevelNames[level]}]";
+                string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(_maxLogTypeStrLen, '.')}]" : $"[{_logLevelNames[level]}]";
 
                 for (int i = 0; i < lines.Length; i++)
                 {
