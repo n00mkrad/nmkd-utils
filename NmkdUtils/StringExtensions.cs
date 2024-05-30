@@ -168,8 +168,18 @@ namespace NmkdUtils
             if (place == -1)
                 return s;
 
-            string result = s.Remove(place, find.Length).Insert(place, replace);
-            return result;
+            return s.Remove(place, find.Length).Insert(place, replace);
+        }
+
+        /// <summary> Replaces only the last occurence of a string in a string </summary>
+        public static string ReplaceLastOccurrence(this string s, string find, string replace)
+        {
+            int place = s.LastIndexOf(find);
+
+            if (place == -1)
+                return s;
+
+            return s.Remove(place, find.Length).Insert(place, replace);
         }
 
         /// <summary> Shortcut for ToLowerInvariant </summary>
