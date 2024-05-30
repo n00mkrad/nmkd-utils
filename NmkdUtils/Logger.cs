@@ -9,7 +9,7 @@ namespace NmkdUtils
         public enum Level { Debug, Verbose, Info, Warning, Error }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
-        public static bool PrintLongLevelNames = false;
+        public static bool PrintFullLevelNames = false;
 
         private static ConcurrentQueue<(string, Level)> _logQueue = new();
         private static Thread _loggingThread;
@@ -107,18 +107,12 @@ namespace NmkdUtils
             if ((int)level >= (int)ConsoleLogLevel)
             {
                 var lines = msg.SplitIntoLines();
+                string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(MaxLogTypeStrLength, '.')}]" : $"[{_logLevelNames[level]}]";
+
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (PrintLongLevelNames)
-                    {
-                        string prefix = i == 0 ? $"[{level.ToString().Up().PadRight(MaxLogTypeStrLength, '.')}]" : "".PadRight(MaxLogTypeStrLength + 2);
-                        lines[i] = $"{prefix} {lines[i].Trim()}";
-                    }
-                    else
-                    {
-                        string prefix = i == 0 ? $"[{_logLevelNames[level]}]" : "".PadRight(3);
-                        lines[i] = $"{prefix} {lines[i].Trim()}";
-                    }
+                    string prefix = i == 0 ? firstLinePrefix : "".PadRight(firstLinePrefix.Length);
+                    lines[i] = $"{prefix} {lines[i].Trim()}";
                 }
 
                 Console.ForegroundColor = _logLevelColors[level];
@@ -132,7 +126,16 @@ namespace NmkdUtils
                 string time = now.ToString("yyyy-MM-dd HH:mm:ss");
                 string day = now.ToString("yyyy-MM-dd");
 
-                TryWriteToFile(Path.Combine(LogsDir, $"{day}.txt"), $"[{time}] {msg}");
+                var lines = msg.SplitIntoLines();
+                string firstLinePrefix = $"[{time}] [{_logLevelNames[level]}]";
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string prefix = i == 0 ? firstLinePrefix : "".PadRight(firstLinePrefix.Length);
+                    lines[i] = $"{prefix} {lines[i].Trim()}";
+                }
+
+                TryWriteToFile(Path.Combine(LogsDir, $"{day}.txt"), string.Join(Environment.NewLine, lines));
             }
         }
 
