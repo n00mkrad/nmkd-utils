@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.IO;
+using System.Threading;
 
 namespace NmkdUtils
 {
@@ -11,7 +13,7 @@ namespace NmkdUtils
         public static Level FileLogLevel = Level.Info;
         public static bool PrintFullLevelNames = false;
 
-        private static ConcurrentQueue<(string, Level)> _logQueue = new();
+        private static BlockingCollection<(string, Level)> _logQueue = new BlockingCollection<(string, Level)>();
         private static Thread _loggingThread;
 
         private static readonly Dictionary<Level, ConsoleColor> _logLevelColors = new()
@@ -50,23 +52,15 @@ namespace NmkdUtils
 
         public static void StopLogging()
         {
-            while (!_logQueue.IsEmpty)
-            {
-                Thread.Sleep(1);
-            }
+            _logQueue.CompleteAdding();
+            _loggingThread.Join(); // Ensure the thread exits by joining it.
         }
 
         private static void ProcessLogQueue()
         {
-            while (true)
+            foreach (var entry in _logQueue.GetConsumingEnumerable())
             {
-                if (_logQueue.TryDequeue(out (string msg, Level type) entry))
-                {
-                    WriteLog(entry.msg, entry.type);
-                    continue;
-                }
-
-                Thread.Sleep(10);
+                WriteLog(entry.Item1, entry.Item2);
             }
         }
 
@@ -80,10 +74,9 @@ namespace NmkdUtils
 
         public static void Log(object o, Level level = Level.Info)
         {
-            // Only enqueue if loglevel meets console or file level, as otherwise nothing would happen when dequeuing
             if ((int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
             {
-                _logQueue.Enqueue(($"{o}", level));
+                _logQueue.Add(($"{o}", level));
             }
         }
 
