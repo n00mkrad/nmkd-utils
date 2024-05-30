@@ -205,5 +205,30 @@ namespace NmkdUtils
                 return fallback.GetValueOrDefault();
             }
         }
+
+        /// <summary> Limit sting to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the last 3 chars if too long </summary>
+        public static string Trunc(this string s, int maxChars, bool ellipsis = true)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            string str = s.Length <= maxChars ? s : s.Substring(0, maxChars);
+
+            if (ellipsis && s.Length > maxChars)
+            {
+                str += "…";
+            }
+
+            return str;
+        }
+
+        /// <summary> Shortcut for Replace(myString, string.Empty) </summary>
+        public static string Remove(this string s, string stringToRemove)
+        {
+            if (s.IsEmpty() || stringToRemove.IsEmpty())
+                return s;
+
+            return s.Replace(stringToRemove, "");
+        }
     }
 }

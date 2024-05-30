@@ -6,7 +6,7 @@ namespace NmkdUtils
     public class Logger
     {
         public static string LogsDir { get => Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "Logs")).FullName; }
-        public enum Level { Verbose, Info, Warning, Error }
+        public enum Level { Debug, Verbose, Info, Warning, Error }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
         public static bool PrintLongLevelNames = false;
@@ -16,6 +16,7 @@ namespace NmkdUtils
 
         private static readonly Dictionary<Level, ConsoleColor> _logLevelColors = new()
         {
+            { Level.Debug, ConsoleColor.DarkGray },
             { Level.Verbose, ConsoleColor.Gray },
             { Level.Info, ConsoleColor.White },
             { Level.Warning, ConsoleColor.Yellow },
@@ -24,6 +25,7 @@ namespace NmkdUtils
 
         private static readonly Dictionary<Level, string> _logLevelNames = new()
         {
+            { Level.Debug, "DBG" },
             { Level.Verbose, "VRB" },
             { Level.Info, "INF" },
             { Level.Warning, "WRN" },

@@ -3,7 +3,7 @@ namespace NmkdUtils
 {
     public static class ConfigMgr<T> where T : new()
     {
-        public static string CfgFile { get => Path.Combine(AppContext.BaseDirectory, "config.json"); }
+        public static string CfgFile = "";
 
         private static T? _config = default;
 
@@ -18,6 +18,11 @@ namespace NmkdUtils
 
                 return _config ?? new T();
             }
+        }
+
+        static ConfigMgr()
+        {
+            CfgFile = Path.Combine(AppContext.BaseDirectory, "config.json");
         }
 
         public static void Read()
