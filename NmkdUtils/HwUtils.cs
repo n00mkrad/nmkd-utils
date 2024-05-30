@@ -15,12 +15,22 @@ namespace NmkdUtils
             public float AvailGb => (float)AvailBytes / 1024 / 1024 / 1024;
         }
 
+        private static PerformanceCounter? PerfCounterRam = null;
+
         public static RamInfo GetRamInfo()
         {
             if (OsUtils.IsWindows)
             {
-                var availableMemory = new PerformanceCounter("Memory", "Available Bytes");
-                var availBytes = (long)availableMemory.NextValue();
+                string availOutput = OsUtils.RunCommand("wmic OS get FreePhysicalMemory", false);
+                var availBytes = availOutput.SplitIntoLines().Where(l => l.IsNotEmpty()).Last().GetLong() * 1024;
+
+                if (availBytes <= 0 && false)
+                {
+                    Logger.LogWrn("Getting RAM using PerformanceCounter instead of wmic command, this is a lot slower on the first run!");
+                    PerfCounterRam ??= new PerformanceCounter("Memory", "Available Bytes");
+                    availBytes = (long)PerfCounterRam.NextValue();
+                }
+
                 var totalPhysicalMemory = (long)(GetPhysicallyInstalledSystemMemory(out ulong totalMemKb) ? totalMemKb : 0) * 1024;
                 var usedMemory = totalPhysicalMemory - availBytes;
                 return new RamInfo() { TotalBytes = totalPhysicalMemory, UsedBytes = usedMemory, AvailBytes = availBytes };

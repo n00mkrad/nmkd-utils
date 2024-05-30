@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 using static NmkdUtils.Logger;
 
 namespace NmkdUtils
@@ -16,7 +12,7 @@ namespace NmkdUtils
 
         public static string RunCommand(string command, bool printCmd = true)
         {
-            return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, () => false, printCmd);
+            return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, null, printCmd);
         }
 
         public static string RunCommandWithKillswitch(string command, Func<bool> killswitch, bool printCmd = true)
@@ -24,7 +20,7 @@ namespace NmkdUtils
             return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, killswitch, printCmd);
         }
 
-        public static string RunCommandWin(string command, Func<bool> killswitch, bool printCmd = true)
+        public static string RunCommandWin(string command, Func<bool>? killswitch = null, bool printCmd = true)
         {
             try
             {
