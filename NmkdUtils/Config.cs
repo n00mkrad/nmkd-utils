@@ -31,7 +31,7 @@ namespace NmkdUtils
             {
                 if (!File.Exists(CfgFile))
                 {
-                    Logger.LogErr($"No config found.");
+                    Logger.LogWrn($"No config found.");
                     _config = new T();
                     return;
                 }

@@ -160,6 +160,18 @@ namespace NmkdUtils
             return str;
         }
 
+        /// <summary> Replaces only the first occurence of a string in a string </summary>
+        public static string ReplaceFirst(this string s, string find, string replace)
+        {
+            int place = s.IndexOf(find);
+
+            if (place == -1)
+                return s;
+
+            string result = s.Remove(place, find.Length).Insert(place, replace);
+            return result;
+        }
+
         /// <summary> Shortcut for ToLowerInvariant </summary>
         public static string Low(this string s)
         {
@@ -229,6 +241,15 @@ namespace NmkdUtils
                 return s;
 
             return s.Replace(stringToRemove, "");
+        }
+
+        /// <summary> Trims whitespaces as well as trailing slashes or backslashes </summary>
+        public static string TrimPath (this string s)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            return s.Trim().TrimEnd('\\').TrimEnd('/');
         }
     }
 }

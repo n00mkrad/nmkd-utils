@@ -10,17 +10,17 @@ namespace NmkdUtils
         public static bool IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         public static bool IsLinux => !IsWindows;
 
-        public static string RunCommand(string command, bool printCmd = true)
+        public static string RunCommand(string command, bool printCmd = false)
         {
             return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, null, printCmd);
         }
 
-        public static string RunCommandWithKillswitch(string command, Func<bool> killswitch, bool printCmd = true)
+        public static string RunCommandWithKillswitch(string command, Func<bool> killswitch, bool printCmd = false)
         {
             return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, killswitch, printCmd);
         }
 
-        public static string RunCommandWin(string command, Func<bool>? killswitch = null, bool printCmd = true)
+        public static string RunCommandWin(string command, Func<bool>? killswitch = null, bool printCmd = false)
         {
             try
             {
