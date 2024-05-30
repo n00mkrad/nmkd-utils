@@ -20,10 +20,15 @@ namespace NmkdUtils
             return new List<T> { obj };
         }
 
-        /// <summary> Like Distinct() but on specified property </summary>
-        public static IEnumerable<T> DistinctBy<T, TKey>(this IEnumerable<T> items, Func<T, TKey> property)
+        /// <summary> Get a dictionary entry, return a fallback value if it doesn't exist </summary>
+        public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default(TValue))
         {
-            return items.GroupBy(property).Select(x => x.First());
+            if (dictionary == null)
+            {
+                return defaultValue;
+            }
+
+            return dictionary.TryGetValue(key, out TValue value) ? value : defaultValue;
         }
     }
 }

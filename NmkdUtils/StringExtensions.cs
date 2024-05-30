@@ -161,12 +161,21 @@ namespace NmkdUtils
         }
 
         /// <summary> Shortcut for ToLowerInvariant </summary>
-        public static string Lower(this string s)
+        public static string Low(this string s)
         {
             if (s == null)
                 return s;
 
             return s.ToLowerInvariant();
+        }
+
+        /// <summary> Shortcut for ToUpperInvariant </summary>
+        public static string Up(this string s)
+        {
+            if (s == null)
+                return s;
+
+            return s.ToUpperInvariant();
         }
 
         /// <summary> Removes any chars that are not a digit </summary>
@@ -182,6 +191,19 @@ namespace NmkdUtils
                 return s;
 
             return new string(censorChar, s.Length);
+        }
+
+        /// <summary> Get enum from string (case-insensitive), return <paramref name="fallback"/> if parsing fails </summary>
+        public static TEnum GetEnum<TEnum>(this string enumString, bool ignoreCase = true, TEnum? fallback = null) where TEnum : struct
+        {
+            if (Enum.TryParse(enumString, ignoreCase, out TEnum result))
+            {
+                return result;
+            }
+            else
+            {
+                return fallback.GetValueOrDefault();
+            }
         }
     }
 }
