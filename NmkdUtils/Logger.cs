@@ -34,6 +34,10 @@ namespace NmkdUtils
             { Level.Error, "ERR" },
         };
 
+        public delegate void LogHandler(string message);
+        public static LogHandler OnConsoleWritten;
+        public static LogHandler OnConsoleWrittenWithLvl;
+
         private static readonly int _maxLogTypeStrLen = Enum.GetNames(typeof(Level)).Max(name => name.Length);
 
         static Logger()
@@ -108,9 +112,13 @@ namespace NmkdUtils
                     lines[i] = $"{prefix} {lines[i].Trim()}";
                 }
 
+                string output = string.Join(Environment.NewLine, lines);
                 Console.ForegroundColor = _logLevelColors[level];
-                Console.WriteLine(string.Join(Environment.NewLine, lines));
+                Console.WriteLine(output);
                 Console.ResetColor();
+
+                OnConsoleWritten?.Invoke(msg);
+                OnConsoleWrittenWithLvl?.Invoke(output);
             }
 
             if ((int)level >= (int)FileLogLevel)
