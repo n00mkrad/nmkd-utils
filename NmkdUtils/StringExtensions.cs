@@ -123,6 +123,21 @@ namespace NmkdUtils
             }
         }
 
+        public static bool GetBool(this string s)
+        {
+            try
+            {
+                if (s.IsEmpty())
+                    return false;
+
+                return bool.Parse(s);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary> Split a string by another string </summary>
         public static string[] Split(this string str, string trimStr)
         {
