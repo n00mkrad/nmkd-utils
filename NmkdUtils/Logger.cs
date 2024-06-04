@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.IO;
-using System.Threading;
+﻿using System.Collections.Concurrent;
 
 namespace NmkdUtils
 {
@@ -13,7 +10,7 @@ namespace NmkdUtils
         public static Level FileLogLevel = Level.Info;
         public static bool PrintFullLevelNames = false;
 
-        private static BlockingCollection<(string, Level)> _logQueue = new BlockingCollection<(string, Level)>();
+        private static BlockingCollection<(string, Level)> _logQueue = new();
         private static Thread _loggingThread;
 
         private static readonly Dictionary<Level, ConsoleColor> _logLevelColors = new()
@@ -35,8 +32,8 @@ namespace NmkdUtils
         };
 
         public delegate void LogHandler(string message);
-        public static LogHandler OnConsoleWritten;
-        public static LogHandler OnConsoleWrittenWithLvl;
+        public static LogHandler? OnConsoleWritten;
+        public static LogHandler? OnConsoleWrittenWithLvl;
 
         private static readonly int _maxLogTypeStrLen = Enum.GetNames(typeof(Level)).Max(name => name.Length);
 
