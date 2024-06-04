@@ -177,5 +177,38 @@ namespace NmkdUtils
 
             return new List<string>();
         }
+
+        public static bool TransferFileTimestamps(string pathSource, string pathTarget)
+        {
+            try
+            {
+                var source = new FileInfo(pathSource);
+                var target = new FileInfo(pathTarget);
+                target.CreationTime = source.CreationTime;
+                target.LastWriteTime = source.LastWriteTime;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Failed to transfer timestamps from {pathSource} to {pathTarget}");
+                return false;
+            }
+        }
+
+        public static bool SetFileTimestamps(DateTime timestamp, string pathTarget)
+        {
+            try
+            {
+                var target = new FileInfo(pathTarget);
+                target.CreationTime = timestamp;
+                target.LastWriteTime = timestamp;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Failed to set timestamp son {pathTarget}");
+                return false;
+            }
+        }
     }
 }
