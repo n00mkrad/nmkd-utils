@@ -1,15 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 
 namespace NmkdUtils
 {
     public class NmkdStopwatch : Stopwatch
     {
-        public long ElapsedMs => ElapsedMilliseconds;
+        /// <summary> Shortcut for ElapsedMilliseconds </summary>
+        public long Ms => ElapsedMilliseconds;
+
+        /// <summary> Formatted elapsed time </summary>
+        public string ElapsedStr => FormatUtils.Time(ElapsedMilliseconds);
 
         public NmkdStopwatch(bool startOnCreation = true)
         {
