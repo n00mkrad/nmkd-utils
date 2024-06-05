@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using static NmkdUtils.Logger;
 
@@ -7,8 +8,32 @@ namespace NmkdUtils
 {
     public class OsUtils
     {
-        public static bool IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        public static readonly bool IsWindows;
         public static bool IsLinux => !IsWindows;
+        public static readonly bool IsElevated;
+
+
+        static OsUtils ()
+        {
+            IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+            IsElevated = IsAdminOrSudo();
+        }
+
+        [DllImport("libc")]
+        public static extern uint getuid();
+
+        /// <summary> Checks if the program is running as Administrator (Windows) or sudo (Linux) </summary>
+        public static bool IsAdminOrSudo ()
+        {
+            if (IsWindows)
+            {
+                return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            else
+            {
+                return getuid() == 0;
+            }
+        }
 
         public static string RunCommand(string command, bool printCmd = false)
         {
