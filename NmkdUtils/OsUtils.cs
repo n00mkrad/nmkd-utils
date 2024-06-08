@@ -35,7 +35,7 @@ namespace NmkdUtils
             }
         }
 
-        public static string RunCommand(string command, bool printCmd = false)
+        public static string RunCommand(string command, bool printCmd = false) // TODO: out int exitCode ...
         {
             return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, null, printCmd);
         }
@@ -75,7 +75,7 @@ namespace NmkdUtils
                     else
                     {
                         output.AppendLine(e.Data);
-                        Log($"[STDOUT] {e.Data}", Level.Verbose);
+                        Log($"[STDOUT] {e.Data}", Level.Debug);
                     }
                 };
 
@@ -88,7 +88,7 @@ namespace NmkdUtils
                     else
                     {
                         output.AppendLine(e.Data);
-                        Log($"[STDERR] {e.Data}", Level.Verbose);
+                        Log($"[STDERR] {e.Data}", Level.Debug);
                     }
                 };
 
@@ -201,6 +201,49 @@ namespace NmkdUtils
             }
 
             return p;
+        }
+
+        public static int CountExecutableInstances()
+        {
+            // Get the full path of the current executable
+            var currentExecutablePath = Process.GetCurrentProcess().MainModule?.FileName;
+
+            if (string.IsNullOrEmpty(currentExecutablePath))
+            {
+                LogWrn("Unable to determine the path of the current executable.");
+                return 0;
+            }
+
+            // Normalize the path to ensure uniformity across checks (optional)
+            currentExecutablePath = Path.GetFullPath(currentExecutablePath);
+
+            // Count how many processes have the same executable path
+            int count = 0;
+            foreach (var process in Process.GetProcesses())
+            {
+                try
+                {
+                    string processPath = process.MainModule?.FileName;
+
+                    if (!string.IsNullOrEmpty(processPath))
+                    {
+                        processPath = Path.GetFullPath(processPath);
+
+                        if (processPath.Equals(currentExecutablePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            count++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Handle access denied and other exceptions
+                    // This often happens if the process does not have permission to query certain system processes.
+                    // Log($"Error accessing process: {ex.Message}");
+                }
+            }
+
+            return count;
         }
     }
 }

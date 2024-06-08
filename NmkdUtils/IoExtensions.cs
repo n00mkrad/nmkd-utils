@@ -128,5 +128,20 @@ namespace NmkdUtils
         {
             return files.Sum(f => f.Length);
         }
+
+        public static bool HasExtension(this FileInfo file, string extension)
+        {
+            return file.Extension.TrimStart('.').Up() == extension.TrimStart('.').Up();
+        }
+
+        public static bool HasExtension(this FileInfo file, IEnumerable<string> extensions)
+        {
+            return extensions.Any(file.HasExtension);
+        }
+
+        public static string GetPseudoHash (this FileInfo file)
+        {
+            return IoUtils.GetPseudoHash(file);
+        }
     }
 }

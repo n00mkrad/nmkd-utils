@@ -21,7 +21,7 @@ namespace NmkdUtils
         {
             if (OsUtils.IsWindows)
             {
-                string availOutput = OsUtils.RunCommand("wmic OS get FreePhysicalMemory", false);
+                string availOutput = OsUtils.RunCommand("wmic OS get FreePhysicalMemory");
                 var availBytes = availOutput.SplitIntoLines().Where(l => l.IsNotEmpty()).Last().GetLong() * 1024;
 
                 if (availBytes <= 0 && false)
@@ -38,7 +38,7 @@ namespace NmkdUtils
 
             if (OsUtils.IsLinux)
             {
-                string freeOutput = OsUtils.RunCommand("free | grep Mem", false); // "Mem: <total> <used> <free> <shared> <buff/cache> <available>" with spacing
+                string freeOutput = OsUtils.RunCommand("free | grep Mem"); // "Mem: <total> <used> <free> <shared> <buff/cache> <available>" with spacing
                 freeOutput = Regex.Replace(freeOutput, @"\s+", ";"); // Replace empty space with delimiters
                 var numbers = freeOutput.Split(';').Skip(1).Where(s => s.Length > 0).Select(n => n.GetLong()).ToList(); // Split by that delimiter and convert to numbers
                 return new RamInfo() { TotalBytes = numbers[0] * 1024, UsedBytes = numbers[1] * 1024, AvailBytes = numbers.Last() * 1024 };

@@ -153,6 +153,20 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Sends a folder to the recycle bin </summary>
+        public static bool RecycleDir(string path)
+        {
+            try
+            {
+                FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Does nothing if <paramref name="dryRun"/> is true. </summary>
         public static void DeleteFile(string path, bool recycle = false, bool dryRun = false, Logger.Level logLvl = Logger.Level.Verbose)
         {
@@ -171,27 +185,32 @@ namespace NmkdUtils
             }
         }
 
-        public static List<FileInfo> DeletePath(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
+        public static void DeletePath(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
-            List<FileInfo> deletedFiles = new();
             try
             {
                 // Check if the path exists
                 if (!File.Exists(path) && !Directory.Exists(path))
                 {
                     Logger.Log($"Does not exist: {path}", Logger.Level.Verbose);
-                    return deletedFiles; // Path does not exist, return empty list.
+                    return; // Path does not exist
                 }
 
                 if (File.GetAttributes(path).HasFlag(FileAttributes.Directory))
                 {
-                    // Is a directory, so call DeleteDirectory and add its file results to deletedFiles
-                    deletedFiles.AddRange(DeleteDirectory(path: path, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun));
+                    if (recycle)
+                    {
+                        RecycleDir(path);
+                    }
+                    else
+                    {
+                        // Is a directory, so call DeleteDirectory and add its file results to deletedFiles
+                        DeleteDirectory(path: path, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun);
+                    }
                 }
                 else
                 {
                     DeleteFile(path, recycle, dryRun);
-                    deletedFiles.Add(new FileInfo(path));
                 }
             }
             catch (Exception ex)
@@ -203,13 +222,11 @@ namespace NmkdUtils
                 Logger.LogConditional($"Failed to delete {path}: {ex.Message}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
             }
 
-            Logger.Log($"Deleted {path} ({FormatUtils.FileSize(deletedFiles.GetSize())})", Logger.Level.Verbose);
-            return deletedFiles;
+            Logger.Log((dryRun ? $"Would have deleted {path}" : $"Deleted {path}"), Logger.Level.Verbose);
         }
 
-        private static List<FileInfo> DeleteDirectory(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
+        private static void DeleteDirectory(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
-            List<FileInfo> deletedFiles = new();
             // Get all files and directories in the directory
             string[] files = Directory.GetFiles(path);
             string[] directories = Directory.GetDirectories(path);
@@ -218,8 +235,7 @@ namespace NmkdUtils
             {
                 try
                 {
-                    DeleteFile(path, recycle, dryRun);
-                    deletedFiles.Add(new FileInfo(file));
+                    DeleteFile(file, recycle, dryRun);
                 }
                 catch (Exception ex)
                 {
@@ -233,7 +249,7 @@ namespace NmkdUtils
 
             foreach (string dir in directories)
             {
-                deletedFiles.AddRange(DeleteDirectory(path: dir, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun));
+                DeleteDirectory(path: dir, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun);
             }
 
             if (!dryRun)
@@ -252,8 +268,6 @@ namespace NmkdUtils
                     Logger.LogConditional($"Failed to delete {path}: {ex.Message}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
                 }
             }
-
-            return deletedFiles;
         }
 
         /// <summary> Delete a path if it exists. Works for files and directories. Returns success status. </summary>
@@ -315,7 +329,8 @@ namespace NmkdUtils
         //         return false;
         //     }
         // }
-        
+
+        /// <summary> More reliable alternative to File.ReadAllLines, should work for files that are being accessed from another process </summary>
         public static List<string> ReadFileLinesSafe(string path)
         {
             // Ensure that other processes can read and write to the file while it is open
@@ -339,6 +354,7 @@ namespace NmkdUtils
             return new List<string>();
         }
 
+        /// <summary> Transfer "Created" and "Last Modified" timestamps from <paramref name="pathSource"/> to <paramref name="pathTarget"/> </summary>
         public static bool TransferFileTimestamps(string pathSource, string pathTarget)
         {
             try
@@ -356,20 +372,28 @@ namespace NmkdUtils
             }
         }
 
-        public static bool SetFileTimestamps(DateTime timestamp, string pathTarget)
+        /// <summary> Set "Created" and "Last Modified" timestamps of a <paramref name="file"/> to <paramref name="timestamp"/> </summary>
+        public static bool SetFileTimestamps(DateTime timestamp, string file)
         {
             try
             {
-                var target = new FileInfo(pathTarget);
+                var target = new FileInfo(file);
                 target.CreationTime = timestamp;
                 target.LastWriteTime = timestamp;
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.Log(ex, $"Failed to set timestamp son {pathTarget}");
+                Logger.Log(ex, $"Failed to set timestamp son {file}");
                 return false;
             }
+        }
+
+        /// <summary> A pseudo-hash built purely from the file metadata, thus not needing almost zero CPU or I/O resources no matter how big the file is.
+        /// <br/>Largely reliable, unless a file was edited without a file size change and without LastWriteTime being changed, which is extremely unlikely. </summary>
+        public static string GetPseudoHash (FileInfo file)
+        {
+            return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
         }
     }
 }
