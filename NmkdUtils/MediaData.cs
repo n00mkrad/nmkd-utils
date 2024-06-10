@@ -19,11 +19,23 @@ namespace NmkdUtils
         public class Format
         {
             public string Filename { get; set; } = "";
-            public int NbStreams { get; set; }
-            public long Size { get; set; }
-            public int BitRate { get; set; }
+            [JsonProperty("nb_streams")]
+            public int StreamsCount { get; set; }
+            [JsonProperty("size")]
+            public long SizeBytes { get; set; }
+            [JsonProperty("format_name")]
+            public string FormatName { get; set; } = "";
+            [JsonProperty("bit_rate")]
+            public int Bitrate { get; set; }
+            [JsonProperty("duration")]
+            public float DurationSecs { get; set; }
+            [JsonProperty("probe_score")]
+            public int FfprobeScore { get; set; }
             public Dictionary<string, string> Tags { get; set; } = new();
-            public string Title => Tags.Get("title", "");
+
+            [JsonIgnore] public string Title => Tags.Get("title");
+            [JsonIgnore] public TimeSpan Duration => TimeSpan.FromSeconds(DurationSecs);
+            [JsonIgnore] public string DurationStr => FormatUtils.Time(Duration);
         }
 
 
@@ -60,6 +72,29 @@ namespace NmkdUtils
             private void OnDeserialized(StreamingContext context)
             {
                 Values = _values.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
+            }
+
+            public override string ToString()
+            {
+                string t = Type.ToString();
+                var lang = LanguageUtils.GetLang(Language, Language);
+                string langStr = lang == null ? "" : $", {lang.Name}";
+                string str = $"[{Index}] {t}: {Codec.Up()}{langStr}";
+
+                if (Type == CodecType.Audio)
+                {
+                    var a = (AudioStream)this;
+
+                    List<string> infos = new()
+                    {
+                        Title.IsNotEmpty() ? $"'{Title}'" : "",
+                        $"{(a.SampleRate / 1000).ToString("0.0###")} kHz",
+                    };
+
+                    return $"{str}, {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
+                }
+
+                return str;
             }
         }
 
@@ -166,19 +201,6 @@ namespace NmkdUtils
                     default:
                         return genericStream; // Return as basic stream if type does not match
                 }
-            }
-
-            public static string GetString(Stream s)
-            {
-                string t = s.Type.ToString();
-
-                if (s.Type == CodecType.Audio)
-                {
-                    var a = (AudioStream)s;
-                    return $"{t} Stream {s.Index}: {s.Codec.Up()} {s.Language.Up()} '{s.Title}' {a.SampleRate} Hz";
-                }
-
-                return $"{t} Stream {s.Index}: {s.Codec.Up()}";
             }
         }
     }
