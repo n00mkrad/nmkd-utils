@@ -20,15 +20,23 @@ namespace NmkdUtils
             return new List<T> { obj };
         }
 
-        /// <summary> Get a dictionary entry, return a fallback value if it doesn't exist </summary>
-        public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default(TValue))
+        public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default)
         {
             if (dictionary == null)
             {
                 return defaultValue;
             }
 
-            return dictionary.TryGetValue(key, out TValue value) ? value : defaultValue;
+            TValue result = dictionary.TryGetValue(key, out var value) ? value : defaultValue;
+
+            // For string values, return empty string instead of null as default value
+            if (result == null && typeof(TValue) == typeof(string))
+            {
+                return (TValue)(object)string.Empty;
+            }
+
+            return result;
         }
+
     }
 }
