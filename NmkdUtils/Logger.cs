@@ -155,5 +155,15 @@ namespace NmkdUtils
                 TryWriteToFile(path, text, delayMs, retries - 1);
             }
         }
+
+        public static void WaitForEmptyQueue ()
+        {
+            Thread.Sleep(1);
+
+            while (_logQueue.Count > 0)
+            {
+                Thread.Sleep(10);
+            }
+        }
     }
 }
