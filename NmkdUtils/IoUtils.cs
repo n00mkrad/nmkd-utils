@@ -1,11 +1,4 @@
 ﻿using Microsoft.VisualBasic.FileIO;
-using Microsoft.WindowsAPICodePack.Shell;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using SearchOption = System.IO.SearchOption;
 
 namespace NmkdUtils
