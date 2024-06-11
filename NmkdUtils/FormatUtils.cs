@@ -60,5 +60,18 @@ namespace NmkdUtils
                 return $"{days:D2}:{hours:D2}:{minutes:D2}:{seconds:D2}";
             }
         }
+
+        public class Media
+        {
+            public static int BitDepthFromPixFmt(string pixFmt)
+            {
+                pixFmt = pixFmt.Low();
+                if (pixFmt.MatchesWildcard("yuv*p")) return 8;
+                if (pixFmt.MatchesWildcard("*p10?e")) return 10;
+                if (pixFmt.MatchesWildcard("*p12?e")) return 12;
+                if (pixFmt.MatchesWildcard("*p16?e")) return 16;
+                return 0;
+            }
+        }
     }
 }
