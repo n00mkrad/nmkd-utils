@@ -32,13 +32,13 @@ namespace NmkdUtils
 
         public static Language GetLang(string iso6391, string iso6392, string iso6392B = "")
         {
-            var lang = Languages.Where(l => l.Iso6391 == iso6391).FirstOrDefault();
+            var lang = Languages.Where(l => l.Iso6391.IsNotEmpty() && l.Iso6391 == iso6391).FirstOrDefault();
 
             if(lang == null && iso6392.IsNotEmpty())
-                lang = Languages.Where(l => l.Iso6392 == iso6392).FirstOrDefault();
+                lang = Languages.Where(l => l.Iso6392.IsNotEmpty() && l.Iso6392 == iso6392).FirstOrDefault();
 
             if (lang == null && iso6392B.IsNotEmpty())
-                lang = Languages.Where(l => l.Iso6392B == iso6392B).FirstOrDefault();
+                lang = Languages.Where(l => l.Iso6392B.IsNotEmpty() && l.Iso6392B == iso6392B).FirstOrDefault();
 
             return lang;
         }
