@@ -48,6 +48,7 @@ namespace NmkdUtils
             public Dictionary<string, string> Values { get; set; } = new();
             public Dictionary<string, int> Disposition { get; set; }
             public Dictionary<string, string> Tags { get; set; }
+            public List<Dictionary<string, string>> SideData { get; set; }
             public string Title => Tags.Get("title", "");
             public string Language => Tags.Get("language", "");
             public bool Default => Disposition.Get("default") == 1;
@@ -58,7 +59,7 @@ namespace NmkdUtils
             public Stream() { }
 
             [JsonConstructor]
-            public Stream(int index, string codec_name, string codec_long_name, string codec_type, Dictionary<string, int> disposition, Dictionary<string, string> tags)
+            public Stream(int index, string codec_name, string codec_long_name, string codec_type, Dictionary<string, int> disposition, Dictionary<string, string> tags, List<Dictionary<string, string>> side_data_list)
             {
                 Index = index;
                 Codec = codec_name;
@@ -66,6 +67,7 @@ namespace NmkdUtils
                 Type = Enum.TryParse<CodecType>(codec_type, true, out var result) ? result : CodecType.Unknown;
                 Disposition = disposition;
                 Tags = tags;
+                SideData = side_data_list;
             }
 
             [OnDeserialized]
@@ -92,12 +94,14 @@ namespace NmkdUtils
                     var v = (VideoStream)this;
                     infos.Add($"{v.Width}x{v.Height}");
                     infos.Add(v.PixFmt.Up());
+                    infos.Add(v.DoviProfile >= 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
+                    infos.Add(v.Hdr10 ? "HDR10" : "");
                     infos.Add($"{v.Fps} FPS");
                     infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                     infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
                     infos.Add($"SAR {v.Values.Get("sample_aspect_ratio", "?")}");
                     infos.Add($"DAR {v.Values.Get("display_aspect_ratio", "?")}");
-                } 
+                }
                 else if (Type == CodecType.Audio)
                 {
                     var a = (AudioStream)this;
@@ -119,8 +123,14 @@ namespace NmkdUtils
             public int Width => Values.Get("width").GetInt();
             public int Height => Values.Get("height").GetInt();
             public string PixFmt => Values.Get("pix_fmt", "");
+            public bool Hdr10 => ColorTransfer == "smpte2084" && ColorPrimaries == "bt2020";
+            public bool LimitedRange => Values.Get("color_range", "tv") == "tv";
+            public string ColorSpace => Values.Get("color_space", "");
+            public string ColorTransfer => Values.Get("color_transfer", "");
+            public string ColorPrimaries => Values.Get("color_primaries", "");
             public string Fps => Values.Get("r_frame_rate", "");
             public string AvgFps => Values.Get("avg_frame_rate", "");
+            public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
 
             public VideoStream(Stream s)
             {
@@ -130,6 +140,7 @@ namespace NmkdUtils
                 CodecLong = s.CodecLong;
                 Values = s.Values;
                 Tags = s.Tags;
+                SideData = s.SideData;
             }
         }
 
