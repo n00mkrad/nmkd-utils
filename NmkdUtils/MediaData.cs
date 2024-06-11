@@ -208,11 +208,18 @@ namespace NmkdUtils
             private void Load(string path)
             {
                 string json = FfmpegUtils.GetFfprobeOutputCached(path);
-                RawJson = JObject.Parse(json);
-                var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
-                var parsedData = JsonConvert.DeserializeObject<MediaObject>(json, settings);
-                Streams = parsedData.Streams.Select(CreateStream).ToList();
-                Format = parsedData.Format;
+                try
+                {
+                    RawJson = JObject.Parse(json);
+                    var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
+                    var parsedData = JsonConvert.DeserializeObject<MediaObject>(json, settings);
+                    Streams = parsedData.Streams.Select(CreateStream).ToList();
+                    Format = parsedData.Format;
+                }
+                catch(Exception ex)
+                {
+                    Logger.Log(ex, "Error loading MediaFile");
+                }
             }
 
             private static Stream CreateStream(Stream genericStream)
