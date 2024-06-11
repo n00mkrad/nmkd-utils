@@ -27,7 +27,7 @@ namespace NmkdUtils
 
         public static Language GetLang(string code)
         {
-            return GetLang(code, code);
+            return GetLang(code, code, code);
         }
 
         public static Language GetLang(string iso6391, string iso6392, string iso6392B = "")
