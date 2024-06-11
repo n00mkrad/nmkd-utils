@@ -55,7 +55,7 @@ namespace NmkdUtils
             [JsonExtensionData]
             private IDictionary<string, JToken> _values;
 
-            public Stream () { }
+            public Stream() { }
 
             [JsonConstructor]
             public Stream(int index, string codec_name, string codec_long_name, string codec_type, Dictionary<string, int> disposition, Dictionary<string, string> tags)
@@ -76,25 +76,41 @@ namespace NmkdUtils
 
             public override string ToString()
             {
-                string t = Type.ToString();
-                var lang = LanguageUtils.GetLang(Language, Language);
-                string langStr = lang == null ? "" : $", {lang.Name}";
-                string str = $"[{Index}] {t}: {Codec.Up()}{langStr}";
+                string streamType = Type.ToString();
+                string str = $"[{Index}] {streamType}:";
+                var lang = LanguageUtils.GetLang(Language);
 
-                if (Type == CodecType.Audio)
+                List<string> infos = new()
+                {
+                    Aliases.GetFriendlyCodecName(Codec),
+                    lang == null ? "Unknown Language" : lang.Name,
+                    Title.IsNotEmpty() ? $"'{Title}'" : "",
+                };
+
+                if (Type == CodecType.Video)
+                {
+                    var v = (VideoStream)this;
+                    infos.Add($"{v.Width}x{v.Height}");
+                    infos.Add(v.PixFmt.Up());
+                    infos.Add($"{v.Fps} FPS");
+                    infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
+                    infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
+                    infos.Add($"SAR {v.Values.Get("sample_aspect_ratio", "?")}");
+                    infos.Add($"DAR {v.Values.Get("display_aspect_ratio", "?")}");
+                } 
+                else if (Type == CodecType.Audio)
                 {
                     var a = (AudioStream)this;
-
-                    List<string> infos = new()
-                    {
-                        Title.IsNotEmpty() ? $"'{Title}'" : "",
-                        $"{(a.SampleRate / 1000).ToString("0.0###")} kHz",
-                    };
-
-                    return $"{str}, {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
+                    infos.Add($"{(a.SampleRate / 1000).ToString("0.0###")} kHz");
+                    infos.Add($"{a.Channels} Channels");
+                    infos.Add(a.ChannelLayout);
+                }
+                else if (Type == CodecType.Subtitle)
+                {
+                    // TODO ...
                 }
 
-                return str;
+                return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
             }
         }
 
