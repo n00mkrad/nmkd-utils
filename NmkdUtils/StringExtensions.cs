@@ -270,5 +270,49 @@ namespace NmkdUtils
 
             return s.Trim().TrimEnd('\\').TrimEnd('/');
         }
+
+        /// <summary> Checks if a string matches a wildcard <paramref name="pattern"/> </summary>
+        public static bool MatchesWildcard(this string s, string pattern, bool ignoreCase = true)
+        {
+            return WildcardMatch(pattern, s, 0, 0, ignoreCase);
+        }
+
+        /// <summary> https://github.com/picrap/WildcardMatch </summary>
+        private static bool WildcardMatch(this string wildcard, string s, int wildcardIndex, int sIndex, bool ignoreCase)
+        {
+            for (; ; )
+            {
+                // in the wildcard end, if we are at tested string end, then strings match
+                if (wildcardIndex == wildcard.Length)
+                    return sIndex == s.Length;
+
+                var c = wildcard[wildcardIndex];
+                switch (c)
+                {
+                    // always a match
+                    case '?':
+                        break;
+                    case '*':
+                        // if this is the last wildcard char, then we have a match, whatever the tested string is
+                        if (wildcardIndex == wildcard.Length - 1)
+                            return true;
+                        // test if a match follows
+                        return Enumerable.Range(sIndex, s.Length - sIndex).Any(i => WildcardMatch(wildcard, s, wildcardIndex + 1, i, ignoreCase));
+                    default:
+                        var cc = ignoreCase ? char.ToLower(c) : c;
+                        if (s.Length == sIndex)
+                        {
+                            return false;
+                        }
+                        var sc = ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex];
+                        if (cc != sc)
+                            return false;
+                        break;
+                }
+
+                wildcardIndex++;
+                sIndex++;
+            }
+        }
     }
 }
