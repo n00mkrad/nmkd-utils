@@ -1,5 +1,7 @@
 ﻿
 
+using static System.Runtime.InteropServices.JavaScript.JSType;
+
 namespace NmkdUtils
 {
     public class Aliases
@@ -25,7 +27,6 @@ namespace NmkdUtils
             if (n == "truehd") return "TrueHD";
             if (n == "wmav2") return "WMAV2";
             if (n == "wmapro") return "WMA Pro";
-            if (n == "pcm_bluray") return "Blu-ray PCM";
             if (n.StartsWith("pcm")) return GetPcmDescription(codecName);
             if (n.StartsWith("adpcm")) return codecName.Replace("_", " ").Up();
             if (n.StartsWith("binkaudio")) return $"Bink Audio {n.Split('_').Last().Up()}";
@@ -50,6 +51,21 @@ namespace NmkdUtils
         private static string GetPcmDescription (string codecName)
         {
             string description = "PCM";
+            int bits = codecName.GetInt();
+
+            if (codecName.EndsWith("daud"))
+            {
+                description += " D-Cinema";
+            }   
+
+            if (bits > 0 && bits % 8 == 0)
+            {
+                description += $" {bits}-bit";
+            }
+            else
+            {
+                return codecName.Replace("_", " ").Up();
+            }
 
             if (codecName.StartsWith("pcm_u"))
             {
