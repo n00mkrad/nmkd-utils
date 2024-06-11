@@ -278,38 +278,41 @@ namespace NmkdUtils
         }
 
         /// <summary> https://github.com/picrap/WildcardMatch </summary>
-        private static bool WildcardMatch(this string wildcard, string s, int wildcardIndex, int sIndex, bool ignoreCase)
+        private static bool WildcardMatch(this string wildcard, ReadOnlySpan<char> s, int wildcardIndex, int sIndex, bool ignoreCase)
         {
-            for (; ; )
+            while (true)
             {
-                // in the wildcard end, if we are at tested string end, then strings match
+                // Check if we are at the end of the wildcard string
                 if (wildcardIndex == wildcard.Length)
                     return sIndex == s.Length;
 
-                var c = wildcard[wildcardIndex];
+                char c = wildcard[wildcardIndex];
                 switch (c)
                 {
-                    // always a match
                     case '?':
+                        // Match any single character
                         break;
                     case '*':
-                        // if this is the last wildcard char, then we have a match, whatever the tested string is
+                        // If this is the last wildcard char, match any sequence including empty
                         if (wildcardIndex == wildcard.Length - 1)
                             return true;
-                        // test if a match follows
-                        return Enumerable.Range(sIndex, s.Length - sIndex).Any(i => WildcardMatch(wildcard, s, wildcardIndex + 1, i, ignoreCase));
-                    default:
-                        var cc = ignoreCase ? char.ToLower(c) : c;
-                        if (s.Length == sIndex)
+
+                        // Try to match the rest of the pattern after the asterisk with any part of the remaining string
+                        for (int i = sIndex; i < s.Length; i++)
                         {
-                            return false;
+                            if (WildcardMatch(wildcard, s.Slice(i), wildcardIndex + 1, 0, ignoreCase))
+                                return true;
                         }
-                        var sc = ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex];
-                        if (cc != sc)
+                        return false;
+                    default:
+                        // Check character match taking into account the ignoreCase parameter
+                        char wildcardChar = ignoreCase ? char.ToLower(c) : c;
+                        if (sIndex == s.Length || (ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex]) != wildcardChar)
                             return false;
                         break;
                 }
 
+                // Move to the next character in both strings
                 wildcardIndex++;
                 sIndex++;
             }
