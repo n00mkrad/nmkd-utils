@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
+using System.Text.RegularExpressions;
 using static NmkdUtils.Logger;
 
 namespace NmkdUtils
@@ -35,34 +37,58 @@ namespace NmkdUtils
             }
         }
 
-        public static string RunCommand(string command, bool printCmd = false) // TODO: out int exitCode ...
+        public class CommandResult
         {
-            return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, null, printCmd);
+            public string Output { get; set; } = "";
+            public string StdOut { get; set; } = "";
+            public string StdErr { get; set; } = "";
+            public int ExitCode { get; set; }
+            public TimeSpan RunTime { get; set; }
+        }
+
+        public static string RunCommand(string command) // TODO: out int exitCode ...
+        {
+            return RunCommandShell(command).Output;
         }
 
         public static string RunCommandWithKillswitch(string command, Func<bool> killswitch, bool printCmd = false)
         {
-            return IsLinux ? RunCommandLinux(command, printCmd) : RunCommandWin(command, killswitch, printCmd);
+            return RunCommandShell(command, killswitch: killswitch).Output;
         }
 
-        public static string RunCommandWin(string command, Func<bool>? killswitch = null, bool printCmd = false)
+        public static CommandResult RunCommandShell(string command, ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal, Func<bool>? killswitch = null)
         {
+            var sw = new NmkdStopwatch();
+            CommandResult? result = null;
+
             try
             {
+                string tempScript = "";
+
+                if (IsLinux)
+                {
+                    tempScript = Path.Combine(Path.GetTempPath(), Path.GetTempFileName()) + ".sh";
+                    File.WriteAllText(tempScript, command);
+                    File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    command = tempScript;
+                }
+
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c {command}",
+                    FileName = !IsLinux ? "cmd.exe" : "/bin/bash",
+                    Arguments = !IsLinux ? $"/c {command}" :  $"-c {command}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
 
-                Log($"cmd.exe /c {command}", printCmd ? Level.Info : Level.Verbose);
+                Log($"{startInfo.FileName} {startInfo.Arguments}", Level.Verbose);
 
                 using var process = new Process { StartInfo = startInfo };
                 var output = new StringBuilder();
+                var stdout = new StringBuilder();
+                var stderr = new StringBuilder();
                 var outputClosed = new TaskCompletionSource<bool>();
                 var errorClosed = new TaskCompletionSource<bool>();
 
@@ -75,6 +101,7 @@ namespace NmkdUtils
                     else
                     {
                         output.AppendLine(e.Data);
+                        stdout.AppendLine(e.Data);
                         Log($"[STDOUT] {e.Data}", Level.Debug);
                     }
                 };
@@ -88,11 +115,13 @@ namespace NmkdUtils
                     else
                     {
                         output.AppendLine(e.Data);
+                        stderr.AppendLine(e.Data);
                         Log($"[STDERR] {e.Data}", Level.Debug);
                     }
                 };
 
                 process.Start();
+                process.PriorityClass = priority;
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
@@ -121,61 +150,59 @@ namespace NmkdUtils
                 // Ensure output and error streams have finished processing
                 Task.WhenAll(outputClosed.Task, errorClosed.Task).Wait();
 
-                return output.ToString();
+                result = new CommandResult { Output = output.ToString(), StdOut = stdout.ToString(), StdErr = stderr.ToString(), RunTime = sw.Elapsed };
+                IoUtils.DeletePath(tempScript);
             }
             catch (Exception ex)
             {
                 Log(ex, "Error running command");
+                result = new CommandResult { ExitCode = 1, RunTime = sw.Elapsed };
             }
 
-            return "";
+            return result;
         }
 
-        public static string RunCommandLinux(string command, bool printCmd = true)
+        public static string BashEscape(string input)
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "/bin/bash",
-                Arguments = $"-c \"{command}\"",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            if (string.IsNullOrEmpty(input))
+                return input;
 
-            try
+            var escaped = new StringBuilder();
+            foreach (char c in input)
             {
-                using Process? process = Process.Start(startInfo);
-                if (process != null)
+                switch (c)
                 {
-                    process.WaitForExit();
-                    string output = process.StandardOutput.ReadToEnd();
-                    Log(output, printCmd ? Level.Info : Level.Verbose);
-                    return output;
-                }
-                else
-                {
-                    LogErr("Failed to start the process.");
+                    case ' ':
+                    case '\t':
+                    case '\n':
+                    case '\\':
+                    case '\'':
+                    case '"':
+                    case '&':
+                    case ';':
+                    case '|':
+                    case '<':
+                    case '>':
+                    case '(':
+                    case ')':
+                    case '$':
+                    case '`':
+                    case '*':
+                    case '?':
+                    case '#':
+                    case '!':
+                    case '{':
+                    case '}':
+                        escaped.Append('\\');
+                        escaped.Append(c);
+                        break;
+                    default:
+                        escaped.Append(c);
+                        break;
                 }
             }
-            catch (Exception ex)
-            {
-                Log(ex, "Error running command");
-            }
 
-            return "";
-        }
-
-        public static string GetProcStdOut(Process process, bool includeStdErr = false, ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal)
-        {
-            if (includeStdErr)
-                process.StartInfo.Arguments += " 2>&1";
-
-            process.Start();
-            process.PriorityClass = priority;
-
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            return output;
+            return escaped.ToString();
         }
 
         public static Process NewProcess(bool hidden, string filename = "cmd.exe", Action<string> logAction = null, bool redirectStdin = false, Encoding outputEnc = null)

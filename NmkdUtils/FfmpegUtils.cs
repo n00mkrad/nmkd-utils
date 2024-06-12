@@ -1,6 +1,4 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System.Runtime.Serialization;
+﻿
 
 namespace NmkdUtils
 {
@@ -9,8 +7,13 @@ namespace NmkdUtils
 
         public static Dictionary<string, string> FfprobeOutputCache = new(); // Key = File hash, Value = Command output
 
-        public static string GetFfprobeOutputCached(string path, string executable = "ffprobe", string args = "-v panic -print_format json -show_format -show_streams")
+        public static string GetFfprobeOutputCached(string path, string executable = "", string args = "-v error -print_format json -show_format -show_streams")
         {
+            if(executable == "")
+            {
+                executable = Settings.FfprobePath;
+            }
+
             string hash = new FileInfo(path).GetPseudoHash();
 
             if (FfprobeOutputCache.ContainsKey(hash))
@@ -19,14 +22,15 @@ namespace NmkdUtils
                 return FfprobeOutputCache[hash];
             }
 
-            string output = OsUtils.RunCommand($"{executable} {args} {path.Wrap()}");
+            var cmdResult = OsUtils.RunCommandShell($"{executable} {args} {path.Wrap()}");
+            Logger.Log($"Ffprobe ExitCode: {cmdResult.ExitCode} ({FormatUtils.Time(cmdResult.RunTime)})", Logger.Level.Verbose);
 
-            if (output.IsNotEmpty() && output.Remove("{").Remove("}").IsNotEmpty())
+            if (cmdResult.ExitCode == 0 && cmdResult.StdOut.IsNotEmpty() && cmdResult.StdOut.Remove("{").Remove("}").IsNotEmpty())
             {
-                FfprobeOutputCache[hash] = output;
+                FfprobeOutputCache[hash] = cmdResult.StdOut;
             }
 
-            return output;
+            return cmdResult.StdOut;
         }
     }
 }
