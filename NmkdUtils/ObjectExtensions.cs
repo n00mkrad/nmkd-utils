@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿
 
 namespace NmkdUtils
 {
@@ -22,20 +18,18 @@ namespace NmkdUtils
 
         public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default)
         {
+            // For string values, use empty string instead of null as default value
+            if (typeof(TValue) == typeof(string) && defaultValue is null)
+            {
+                defaultValue = (TValue)(object)string.Empty;
+            }
+
             if (dictionary == null)
             {
                 return defaultValue;
             }
 
-            TValue result = dictionary.TryGetValue(key, out var value) ? value : defaultValue;
-
-            // For string values, return empty string instead of null as default value
-            if (result == null && typeof(TValue) == typeof(string))
-            {
-                return (TValue)(object)string.Empty;
-            }
-
-            return result;
+            return dictionary.TryGetValue(key, out var value) ? value : defaultValue;
         }
 
     }
