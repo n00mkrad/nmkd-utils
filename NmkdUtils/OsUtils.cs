@@ -162,49 +162,6 @@ namespace NmkdUtils
             return result;
         }
 
-        public static string BashEscape(string input)
-        {
-            if (string.IsNullOrEmpty(input))
-                return input;
-
-            var escaped = new StringBuilder();
-            foreach (char c in input)
-            {
-                switch (c)
-                {
-                    case ' ':
-                    case '\t':
-                    case '\n':
-                    case '\\':
-                    case '\'':
-                    case '"':
-                    case '&':
-                    case ';':
-                    case '|':
-                    case '<':
-                    case '>':
-                    case '(':
-                    case ')':
-                    case '$':
-                    case '`':
-                    case '*':
-                    case '?':
-                    case '#':
-                    case '!':
-                    case '{':
-                    case '}':
-                        escaped.Append('\\');
-                        escaped.Append(c);
-                        break;
-                    default:
-                        escaped.Append(c);
-                        break;
-                }
-            }
-
-            return escaped.ToString();
-        }
-
         public static Process NewProcess(bool hidden, string filename = "cmd.exe", Action<string> logAction = null, bool redirectStdin = false, Encoding outputEnc = null)
         {
             var p = new Process();
@@ -271,6 +228,18 @@ namespace NmkdUtils
             }
 
             return count;
+        }
+
+        public static string GetEnvVar(string name, string fallbackValue = "")
+        {
+            string? value = Environment.GetEnvironmentVariable(name);
+
+            if (value.IsEmpty())
+            {
+                return fallbackValue;
+            }
+
+            return value;
         }
     }
 }
