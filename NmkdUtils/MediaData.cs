@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using static NmkdUtils.MediaData;
 using System.Reflection;
+using NmkdUtils.Structs;
 
 namespace NmkdUtils
 {
@@ -36,6 +37,11 @@ namespace NmkdUtils
             [JsonIgnore] public string Title => Tags.Get("title");
             [JsonIgnore] public TimeSpan Duration => TimeSpan.FromSeconds(DurationSecs);
             [JsonIgnore] public string DurationStr => FormatUtils.Time(Duration);
+
+            public override string ToString()
+            {
+                return $"{StreamsCount} Streams, {FormatUtils.FileSize(SizeBytes)}, {DurationStr}, {(Bitrate / 1024f).RoundToInt()} kbps, {FormatName.Replace(",", "/")}";
+            }
         }
 
 
@@ -70,6 +76,14 @@ namespace NmkdUtils
                 SideData = side_data_list;
             }
 
+            public int GetRelativeIndex(MediaObject parent)
+            {
+                if(Type == CodecType.Video) return parent.VidStreams.IndexOf((VideoStream)this);
+                else if(Type == CodecType.Audio) return parent.AudStreams.IndexOf((AudioStream)this);
+                else if(Type == CodecType.Subtitle) return parent.SubStreams.IndexOf((SubtitleStream)this);
+                return -1;
+            }
+
             [OnDeserialized]
             private void OnDeserialized(StreamingContext context)
             {
@@ -82,21 +96,18 @@ namespace NmkdUtils
                 string str = $"[{Index}] {streamType}:";
                 var lang = LanguageUtils.GetLang(Language);
 
-                List<string> infos = new()
-                {
-                    Aliases.GetFriendlyCodecName(Codec),
-                    lang == null ? "Unknown Language" : lang.Name,
-                    Title.IsNotEmpty() ? $"'{Title}'" : "",
-                };
+                List<string> infos = new();
 
                 if (Type == CodecType.Video)
                 {
-                    var v = (VideoStream)this;
+                    var v = new VideoStream(this);
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile));
+                    infos.Add(Title.IsNotEmpty() ? $"'{Title}'" : "");
                     infos.Add($"{v.Width}x{v.Height}");
                     infos.Add(v.PixFmt.Up());
                     infos.Add(v.DoviProfile >= 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
-                    infos.Add(v.Hdr10 ? "HDR10" : "");
-                    infos.Add($"{v.Fps} FPS");
+                    infos.Add(v.Hdr ? "HDR" : "");
+                    infos.Add($"{v.Fps.GetString("0.###")} ({v.Fps}) FPS");
                     infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                     infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
                     infos.Add($"SAR {v.Values.Get("sample_aspect_ratio", "?")}");
@@ -104,14 +115,23 @@ namespace NmkdUtils
                 }
                 else if (Type == CodecType.Audio)
                 {
-                    var a = (AudioStream)this;
+                    var a = new AudioStream(this);
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile));
                     infos.Add($"{(a.SampleRate / 1000).ToString("0.0###")} kHz");
                     infos.Add($"{a.Channels} Channels");
-                    infos.Add(a.ChannelLayout);
+                    infos.Add(a.ChannelLayout.RemoveTextInParentheses().CapitalizeFirstChar());
                 }
                 else if (Type == CodecType.Subtitle)
                 {
-                    // TODO ...
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec));
+                    var s = new SubtitleStream(this);
+                    infos.Add(s.Forced ? "Forced" : "");
+                    infos.Add(s.Sdh ? "SDH" : "");
+                }
+                else if (Type == CodecType.Attachment)
+                {
+                    var att = new AttachmentStream(this);
+                    infos.Add($"{att.Filename} ({att.MimeType})");
                 }
 
                 return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
@@ -123,25 +143,17 @@ namespace NmkdUtils
             public int Width => Values.Get("width").GetInt();
             public int Height => Values.Get("height").GetInt();
             public string PixFmt => Values.Get("pix_fmt", "");
-            public bool Hdr10 => ColorTransfer == "smpte2084" && ColorPrimaries == "bt2020";
+            public bool Hdr => ColorTransfer == "smpte2084" && ColorPrimaries == "bt2020";
             public bool LimitedRange => Values.Get("color_range", "tv") == "tv";
             public string ColorSpace => Values.Get("color_space", "");
             public string ColorTransfer => Values.Get("color_transfer", "");
             public string ColorPrimaries => Values.Get("color_primaries", "");
-            public string Fps => Values.Get("r_frame_rate", "");
-            public string AvgFps => Values.Get("avg_frame_rate", "");
+            public Fraction Fps => new Fraction(Values.Get("r_frame_rate", ""));
+            public Fraction AvgFps => new Fraction(Values.Get("avg_frame_rate", ""));
+            public string Profile => Values.Get("profile");
             public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
 
-            public VideoStream(Stream s)
-            {
-                Index = s.Index;
-                Type = s.Type;
-                Codec = s.Codec;
-                CodecLong = s.CodecLong;
-                Values = s.Values;
-                Tags = s.Tags;
-                SideData = s.SideData;
-            }
+            public VideoStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; }
         }
 
         public class AudioStream : Stream
@@ -152,15 +164,7 @@ namespace NmkdUtils
             public int Channels => Values.Get("channels").GetInt();
             public string ChannelLayout => Values.Get("channel_layout", "");
 
-            public AudioStream(Stream s)
-            {
-                Index = s.Index;
-                Type = s.Type;
-                Codec = s.Codec;
-                CodecLong = s.CodecLong;
-                Values = s.Values;
-                Tags = s.Tags;
-            }
+            public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
         }
 
         public class SubtitleStream : Stream
@@ -168,15 +172,15 @@ namespace NmkdUtils
             public bool Forced => Disposition.Get("forced") == 1;
             public bool Sdh => Disposition.Get("hearing_impaired") == 1;
 
-            public SubtitleStream(Stream s)
-            {
-                Index = s.Index;
-                Type = s.Type;
-                Codec = s.Codec;
-                CodecLong = s.CodecLong;
-                Values = s.Values;
-                Tags = s.Tags;
-            }
+            public SubtitleStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+        }
+
+        public class AttachmentStream : Stream
+        {
+            public string Filename => Tags.Get("filename");
+            public string MimeType => Tags.Get("mimetype");
+
+            public AttachmentStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
         }
 
         public class MediaObject

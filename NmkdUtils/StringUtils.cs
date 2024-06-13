@@ -1,5 +1,7 @@
 ﻿
 
+using System.Text.RegularExpressions;
+
 namespace NmkdUtils
 {
     public class StringUtils
@@ -26,6 +28,64 @@ namespace NmkdUtils
             }
 
             return prefix;
+        }
+
+        /// <summary> Optimized version based on https://github.com/picrap/WildcardMatch </summary>
+        public static bool WildcardMatch(string wildcard, ReadOnlySpan<char> s, int wildcardIndex, int sIndex, bool ignoreCase)
+        {
+            while (true)
+            {
+                // Check if we are at the end of the wildcard string
+                if (wildcardIndex == wildcard.Length)
+                    return sIndex == s.Length;
+
+                char c = wildcard[wildcardIndex];
+                switch (c)
+                {
+                    case '?':
+                        // Match any single character
+                        break;
+                    case '*':
+                        // If this is the last wildcard char, match any sequence including empty
+                        if (wildcardIndex == wildcard.Length - 1)
+                            return true;
+
+                        // Try to match the rest of the pattern after the asterisk with any part of the remaining string
+                        for (int i = sIndex; i < s.Length; i++)
+                        {
+                            if (WildcardMatch(wildcard, s.Slice(i), wildcardIndex + 1, 0, ignoreCase))
+                                return true;
+                        }
+                        return false;
+                    default:
+                        // Check character match taking into account the ignoreCase parameter
+                        char wildcardChar = ignoreCase ? char.ToLower(c) : c;
+                        if (sIndex == s.Length || (ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex]) != wildcardChar)
+                            return false;
+                        break;
+                }
+
+                // Move to the next character in both strings
+                wildcardIndex++;
+                sIndex++;
+            }
+        }
+
+        public static string ReplacePathsWithFilenames(string s)
+        {
+            // Regular expression to find file paths enclosed in double quotes
+            var regex = new Regex("\"[^\"]*\"");
+
+            // Use a MatchEvaluator delegate to replace each match
+            return regex.Replace(s, m =>
+            {
+                // Extract the path from the matched value and get the filename
+                string fullPath = m.Value.Trim('"');
+                string filename = Path.GetFileName(fullPath);
+
+                // Return the filename enclosed in double quotes
+                return $"\"{filename}\"";
+            });
         }
     }
 }

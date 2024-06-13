@@ -5,8 +5,11 @@ namespace NmkdUtils
     public class Aliases
     {
         /// <summary> Get friendly name for an ffmpeg codec string </summary>
-        public static string GetFriendlyCodecName(string codecName)
+        public static string GetFriendlyCodecName(string codecName, string profile = "")
         {
+            if (codecName == null)
+                return "";
+
             string n = codecName.Low();
 
             // Video
@@ -15,14 +18,15 @@ namespace NmkdUtils
             if (n == "mpeg4") return "MPEG-4";
             if (n == "mpeg2video") return "MPEG-2";
             if (n == "msmpeg4v3") return "MS MPEG-4 V3";
-            if (n == "prores") return "ProRes";
+            if (n == "prores") return $"ProRes {profile}".Trim();
             if (n == "dnxhd") return "DNxHD";
             if (n == "binkvideo") return "Bink Video";
             if (n == "rawvideo") return "Raw Video";
 
             // Audio
+            if (n == "dts") return profile.IsNotEmpty() ? profile : "DTS";
             if (n == "opus") return "Opus";
-            if (n == "truehd") return "TrueHD";
+            if (n == "truehd") return profile.Contains("Atmos") ? "TrueHD Atmos" : "TrueHD";
             if (n == "wmav2") return "WMAV2";
             if (n == "wmapro") return "WMA Pro";
             if (n.StartsWith("pcm")) return GetPcmDescription(codecName);

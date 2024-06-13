@@ -274,48 +274,21 @@ namespace NmkdUtils
         /// <summary> Checks if a string matches a wildcard <paramref name="pattern"/> </summary>
         public static bool MatchesWildcard(this string s, string pattern, bool ignoreCase = true)
         {
-            return WildcardMatch(pattern, s, 0, 0, ignoreCase);
+            return StringUtils.WildcardMatch(pattern, s, 0, 0, ignoreCase);
         }
 
-        /// <summary> https://github.com/picrap/WildcardMatch </summary>
-        private static bool WildcardMatch(this string wildcard, ReadOnlySpan<char> s, int wildcardIndex, int sIndex, bool ignoreCase)
+        public static string CapitalizeFirstChar(this string s)
         {
-            while (true)
-            {
-                // Check if we are at the end of the wildcard string
-                if (wildcardIndex == wildcard.Length)
-                    return sIndex == s.Length;
+            if (s.IsEmpty())
+                return s;
 
-                char c = wildcard[wildcardIndex];
-                switch (c)
-                {
-                    case '?':
-                        // Match any single character
-                        break;
-                    case '*':
-                        // If this is the last wildcard char, match any sequence including empty
-                        if (wildcardIndex == wildcard.Length - 1)
-                            return true;
+            return char.ToUpper(s[0]) + s.Substring(1);
+        }
 
-                        // Try to match the rest of the pattern after the asterisk with any part of the remaining string
-                        for (int i = sIndex; i < s.Length; i++)
-                        {
-                            if (WildcardMatch(wildcard, s.Slice(i), wildcardIndex + 1, 0, ignoreCase))
-                                return true;
-                        }
-                        return false;
-                    default:
-                        // Check character match taking into account the ignoreCase parameter
-                        char wildcardChar = ignoreCase ? char.ToLower(c) : c;
-                        if (sIndex == s.Length || (ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex]) != wildcardChar)
-                            return false;
-                        break;
-                }
-
-                // Move to the next character in both strings
-                wildcardIndex++;
-                sIndex++;
-            }
+        public static string RemoveTextInParentheses (this string s, bool includeLeadingSpace = true)
+        {
+            string pattern = includeLeadingSpace ? @"\s*\([^()]*\)" : @"\([^()]*\)";
+            return Regex.Replace(s, pattern, "");
         }
     }
 }
