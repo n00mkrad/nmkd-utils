@@ -14,12 +14,12 @@ namespace NmkdUtils
                 executable = Settings.FfprobePath;
             }
 
-            string hash = new FileInfo(path).GetPseudoHash();
+            string cacheKey = new FileInfo(path).GetPseudoHash() + args;
 
-            if (FfprobeOutputCache.ContainsKey(hash))
+            if (FfprobeOutputCache.ContainsKey(cacheKey))
             {
                 Logger.Log($"Cached: {path}", Logger.Level.Verbose);
-                return FfprobeOutputCache[hash];
+                return FfprobeOutputCache[cacheKey];
             }
 
             var cmdResult = OsUtils.RunCommandShell($"{executable} {args} {path.Wrap()}");
@@ -27,7 +27,7 @@ namespace NmkdUtils
 
             if (cmdResult.ExitCode == 0 && cmdResult.StdOut.IsNotEmpty() && cmdResult.StdOut.Remove("{").Remove("}").IsNotEmpty())
             {
-                FfprobeOutputCache[hash] = cmdResult.StdOut;
+                FfprobeOutputCache[cacheKey] = cmdResult.StdOut;
             }
 
             return cmdResult.StdOut;
