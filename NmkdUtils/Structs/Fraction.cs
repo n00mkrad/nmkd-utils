@@ -11,19 +11,16 @@ namespace NmkdUtils.Structs
 
         public Fraction(string s)
         {
-            var split = s.Split('/');
-            int numerator = split[0].GetInt();
-            int denominator = split[1].GetInt();
-
-            if (denominator == 0)
-                throw new ArgumentException("Denominator cannot be zero.", nameof(denominator));
-
-            int gcd = GetGcd(numerator, denominator);
-            Numerator = denominator < 0 ? -numerator / gcd : numerator / gcd;
-            Denominator = Math.Abs(denominator / gcd);
+            string[] split = s.Split('/');
+            Initialize(split[0].GetInt(), split[1].GetInt());
         }
 
         public Fraction(int numerator, int denominator)
+        {
+            Initialize(numerator, denominator);
+        }
+
+        private void Initialize(int numerator, int denominator)
         {
             if (denominator == 0)
                 throw new ArgumentException("Denominator cannot be zero.", nameof(denominator));

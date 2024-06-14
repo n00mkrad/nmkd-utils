@@ -71,6 +71,53 @@ namespace NmkdUtils
             }
         }
 
+        public class ColorMasteringData
+        {
+            public Fraction RedX { get; private set; }
+            public Fraction RedY { get; private set; }
+            public Fraction GreenX { get; private set; }
+            public Fraction GreenY { get; private set; }
+            public Fraction BlueX { get; private set; }
+            public Fraction BlueY { get; private set; }
+            public Fraction WhiteX { get; private set; }
+            public Fraction WhiteY { get; private set; }
+            public Fraction MinLuminance { get; private set; }
+            public Fraction MaxLuminance { get; private set; }
+            public int MaxContentLightLevel { get; private set; }
+            public int AvgContentLightLevel { get; private set; }
+
+            public ColorMasteringData (JArray frameSideData)
+            {
+                if (frameSideData == null)
+                    return;
+
+                var colorDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Mastering display metadata").FirstOrDefault();
+                var lightDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Content light level metadata").FirstOrDefault();
+
+                if(colorDict != null)
+                {
+                    var colorValues = colorDict.ToObject<Dictionary<string, string>>();
+                    RedX = new Fraction(colorValues.Get("red_x"));
+                    RedY = new Fraction(colorValues.Get("red_y"));
+                    GreenX = new Fraction(colorValues.Get("green_x"));
+                    GreenY = new Fraction(colorValues.Get("green_y"));
+                    BlueX = new Fraction(colorValues.Get("blue_x"));
+                    BlueY = new Fraction(colorValues.Get("blue_y"));
+                    WhiteX = new Fraction(colorValues.Get("white_point_x"));
+                    WhiteY = new Fraction(colorValues.Get("white_point_y"));
+                }
+
+                if(lightDict != null)
+                {
+                    var lightValues = colorDict.ToObject<Dictionary<string, string>>();
+                    MinLuminance = new Fraction(lightValues.Get("min_luminance"));
+                    MaxLuminance = new Fraction(lightValues.Get("max_luminance"));
+                }
+
+                Logger.Log($"Stream color data: Red {RedX} {RedY}, Green {GreenX} {GreenY}, Blue {BlueX} {BlueY}, White {WhiteX} {WhiteY}, Min Lum {MinLuminance}, Max Lum {MaxLuminance}", Logger.Level.Verbose);
+            }
+        }
+
         public class Stream
         {
             public int Index { get; set; }
@@ -105,9 +152,9 @@ namespace NmkdUtils
             // TODO: Test
             public int GetRelativeIndex(MediaObject parent)
             {
-                if(Type == CodecType.Video) return parent.VidStreams.IndexOf((VideoStream)this);
-                else if(Type == CodecType.Audio) return parent.AudStreams.IndexOf((AudioStream)this);
-                else if(Type == CodecType.Subtitle) return parent.SubStreams.IndexOf((SubtitleStream)this);
+                if (Type == CodecType.Video) return parent.VidStreams.IndexOf((VideoStream)this);
+                else if (Type == CodecType.Audio) return parent.AudStreams.IndexOf((AudioStream)this);
+                else if (Type == CodecType.Subtitle) return parent.SubStreams.IndexOf((SubtitleStream)this);
                 return -1;
             }
 
@@ -155,6 +202,7 @@ namespace NmkdUtils
                     infos.Add(Aliases.GetFriendlyCodecName(Codec));
                     infos.Add(lang == null ? "" : lang.Name);
                     var s = new SubtitleStream(this);
+                    infos.Add(s.Frames > 0 ? $"{s.Frames} Frames" : "");
                     infos.Add(s.Forced ? "Forced" : "");
                     infos.Add(s.Sdh ? "SDH" : "");
                 }
@@ -166,7 +214,7 @@ namespace NmkdUtils
                 else if (Type == CodecType.Attachment)
                 {
                     var at = new AttachmentStream(this);
-                    infos.Add(at.MimeType.IsEmpty() ? at.Filename :  $"{at.Filename} ({at.MimeType})");
+                    infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename} ({at.MimeType})");
                 }
 
                 return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
@@ -176,6 +224,7 @@ namespace NmkdUtils
         public class VideoStream : Stream
         {
             public FrameData? FrameData { get; set; } = null;
+            public ColorMasteringData? ColorData { get; set; } = null;
             public int Width => Values.Get("width").GetInt();
             public int Height => Values.Get("height").GetInt();
             public string PixFmt => Values.Get("pix_fmt", "");
@@ -188,9 +237,9 @@ namespace NmkdUtils
             public Fraction AvgFps => new Fraction(Values.Get("avg_frame_rate", ""));
             public string Profile => Values.Get("profile");
             public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
-            public bool Hdr10Plus => FrameData == null ? false : FrameData.SideData.Any(item => item["side_data_type"] != null && item["side_data_type"].ToString().Contains("HDR10+"));
+            public bool Hdr10Plus => FrameData == null || FrameData.SideData == null ? false : FrameData.SideData.Any(item => item["side_data_type"] != null && item["side_data_type"].ToString().Contains("HDR10+"));
 
-            public VideoStream(Stream s, FrameData? fd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; }
+            public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; }
         }
 
         public class AudioStream : Stream
@@ -206,10 +255,21 @@ namespace NmkdUtils
 
         public class SubtitleStream : Stream
         {
+            public int Frames => GetNumberOfFrames();
             public bool Forced => Disposition.Get("forced") == 1;
             public bool Sdh => Disposition.Get("hearing_impaired") == 1;
 
             public SubtitleStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+
+            private int GetNumberOfFrames()
+            {
+                string s = Tags.Get("NUMBER_OF_FRAMES");
+
+                if (s.IsNotEmpty())
+                    return s.GetInt();
+
+                return Tags.Get("NUMBER_OF_FRAMES-eng").GetInt();
+            }
         }
 
         public class AttachmentStream : Stream
@@ -269,32 +329,19 @@ namespace NmkdUtils
                         AnalyzeFrameData(VidStreams.First());
                     }
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     Logger.Log(ex, "Error loading MediaFile");
                 }
             }
 
-            public void AnalyzeFrameData (VideoStream v)
+            public void AnalyzeFrameData(VideoStream v)
             {
                 string json = FfmpegUtils.GetFfprobeOutputCached(File.FullName, args: "-v error -show_frames -read_intervals \"%+#1\" -select_streams v:0 -print_format json");
                 json = JObject.Parse(json)["frames"].First().ToString();
                 var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
                 v.FrameData = JsonConvert.DeserializeObject<FrameData>(json, settings);
-                // // json = JObject.Parse(json)["frames"].First().ToString();
-                // var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto, MaxDepth = 2 };
-                // var firstFrame = JObject.Parse(json)["frames"].First();
-                // JObject jObject = JObject.Parse(json);
-                // JArray sideDataListArray = (JArray)jObject["frames"][0]["side_data_list"];
-                // List<Dictionary<string, string>> sideDataList = new List<Dictionary<string, string>>();
-                // 
-                // foreach (JObject item in sideDataListArray)
-                // {
-                //     Dictionary<string, string> sideData = item.ToObject<Dictionary<string, string>>();
-                //     sideDataList.Add(sideData);
-                // }
-                // 
-                // FrameData = new FrameData() { Values = firstFrame.Where(jt => jt.Path.Split(".").Last() != "side_data_list").ToDictionary(jt => jt.Path.Split(".").Last(), jt => jt.First().ToString()) };
+                v.ColorData = new ColorMasteringData(v.FrameData.SideData);
             }
 
             private static Stream CreateStream(Stream genericStream)
@@ -307,6 +354,10 @@ namespace NmkdUtils
                         return new AudioStream(genericStream);
                     case CodecType.Subtitle:
                         return new SubtitleStream(genericStream);
+                    case CodecType.Data:
+                        return new DataStream(genericStream);
+                    case CodecType.Attachment:
+                        return new AttachmentStream(genericStream);
                     default:
                         return genericStream; // Return as basic stream if type does not match
                 }
