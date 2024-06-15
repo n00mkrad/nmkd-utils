@@ -18,9 +18,9 @@ namespace NmkdUtils
         }
 
         /// <summary> Wrap with quotes, optionally convert backslashes to slashes or add a space to front/end </summary>
-        public static string Wrap(this string path, bool backslashToSlash = false, bool addSpaceFront = false, bool addSpaceEnd = false)
+        public static string Wrap(this string path, bool backslashToSlash = false, bool addSpaceFront = false, bool addSpaceEnd = false, char ch = '"')
         {
-            string s = "\"" + path + "\"";
+            string s = $"{ch}{path}{ch}";
 
             if (addSpaceFront)
                 s = " " + s;
@@ -33,6 +33,24 @@ namespace NmkdUtils
 
             return s;
         }
+
+        /// <summary> Wrap with single quotes, optionally convert backslashes to slashes or add a space to front/end </summary>
+        public static string WrapSingle(this string path, bool backslashToSlash = false, bool addSpaceFront = false, bool addSpaceEnd = false)
+        {
+            string s = $"'{path}'";
+
+            if (addSpaceFront)
+                s = " " + s;
+
+            if (addSpaceEnd)
+                s += " ";
+
+            if (backslashToSlash)
+                s = s.Replace(@"\", "/");
+
+            return s;
+        }
+
 
         [GeneratedRegex("\r\n|\r|\n")]
         private static partial Regex SplitIntoLinesPattern();
