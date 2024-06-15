@@ -249,8 +249,14 @@ namespace NmkdUtils
             public int SampleRate => Values.Get("sample_rate").GetInt();
             public int Channels => Values.Get("channels").GetInt();
             public string ChannelLayout => Values.Get("channel_layout", "");
+            public TimeSpan Duration => GetDurationTs();
 
             public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+
+            private TimeSpan GetDurationTs ()
+            {
+                return TimeSpan.TryParse(Tags.Get("DURATION", ""), out TimeSpan duration) ? duration : new TimeSpan();
+            }
         }
 
         public class SubtitleStream : Stream
