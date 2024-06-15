@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -191,50 +192,34 @@ namespace NmkdUtils
             return p;
         }
 
-        public static int CountExecutableInstances(bool quiet = true)
+        /// <summary> Count how many instances (including self) of this executable are running </summary>
+        public static int CountExecutableInstances(string exePath = "", bool quiet = true)
         {
-            // Get the full path of the current executable
-            var currentExecutablePath = Process.GetCurrentProcess().MainModule?.FileName;
-
-            if (string.IsNullOrEmpty(currentExecutablePath))
+            try
             {
-                LogWrn("Unable to determine the path of the current executable.");
+                string currentExecutablePath = exePath.IsNotEmpty() ? exePath : Environment.ProcessPath;
+
+                return Process.GetProcesses().AsParallel().WithDegreeOfParallelism(Environment.ProcessorCount).Select(p => {
+                    try
+                    {
+                        return Path.GetFullPath(p.MainModule?.FileName);
+                    }
+                    catch
+                    {
+                        if (!quiet)
+                        {
+                            Log($"Error accessing process {p.Id}");
+                        }
+
+                        return null;
+                    }
+                }).Count(path => path != null && new FileInfo(path).FullName.Low() == new FileInfo(currentExecutablePath).FullName.Low());
+            }
+            catch (Exception ex)
+            {
+                Log(ex, "Error counting executable instances");
                 return 0;
             }
-
-            // Normalize the path to ensure uniformity across checks (optional)
-            currentExecutablePath = Path.GetFullPath(currentExecutablePath);
-
-            // Count how many processes have the same executable path
-            int count = 0;
-            foreach (var process in Process.GetProcesses())
-            {
-                try
-                {
-                    string processPath = process.MainModule?.FileName;
-
-                    if (!string.IsNullOrEmpty(processPath))
-                    {
-                        processPath = Path.GetFullPath(processPath);
-
-                        if (processPath.Equals(currentExecutablePath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            count++;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Handle access denied and other exceptions
-                    // This often happens if the process does not have permission to query certain system processes.
-                    if (!quiet)
-                    {
-                        Log(ex, $"Error accessing process");
-                    }
-                }
-            }
-
-            return count;
         }
 
         public static string GetEnvVar(string name, string fallbackValue = "")
