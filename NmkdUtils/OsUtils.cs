@@ -191,7 +191,7 @@ namespace NmkdUtils
             return p;
         }
 
-        public static int CountExecutableInstances()
+        public static int CountExecutableInstances(bool quiet = true)
         {
             // Get the full path of the current executable
             var currentExecutablePath = Process.GetCurrentProcess().MainModule?.FileName;
@@ -227,7 +227,10 @@ namespace NmkdUtils
                 {
                     // Handle access denied and other exceptions
                     // This often happens if the process does not have permission to query certain system processes.
-                    // Log($"Error accessing process: {ex.Message}");
+                    if (!quiet)
+                    {
+                        Log(ex, $"Error accessing process");
+                    }
                 }
             }
 
@@ -244,6 +247,12 @@ namespace NmkdUtils
             }
 
             return value;
+        }
+
+        public static void SetOwnProcessPriority(ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal)
+        {
+            using Process self = Process.GetCurrentProcess();
+            self.PriorityClass = priority;
         }
     }
 }
