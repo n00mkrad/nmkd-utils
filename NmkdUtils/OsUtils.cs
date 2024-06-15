@@ -15,7 +15,7 @@ namespace NmkdUtils
         public static readonly bool IsElevated;
 
 
-        static OsUtils ()
+        static OsUtils()
         {
             IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
             IsElevated = IsAdminOrSudo();
@@ -25,7 +25,7 @@ namespace NmkdUtils
         public static extern uint getuid();
 
         /// <summary> Checks if the program is running as Administrator (Windows) or sudo (Linux) </summary>
-        public static bool IsAdminOrSudo ()
+        public static bool IsAdminOrSudo()
         {
             if (IsWindows)
             {
@@ -76,7 +76,7 @@ namespace NmkdUtils
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = !IsLinux ? "cmd.exe" : "/bin/bash",
-                    Arguments = !IsLinux ? $"/c {command}" :  $"-c {command}",
+                    Arguments = !IsLinux ? $"/c {command}" : $"-c {command}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -151,7 +151,11 @@ namespace NmkdUtils
                 Task.WhenAll(outputClosed.Task, errorClosed.Task).Wait();
 
                 result = new CommandResult { Output = output.ToString(), StdOut = stdout.ToString(), StdErr = stderr.ToString(), RunTime = sw.Elapsed };
-                IoUtils.DeletePath(tempScript);
+
+                if (tempScript.IsNotEmpty())
+                {
+                    IoUtils.DeletePath(tempScript);
+                }
             }
             catch (Exception ex)
             {
