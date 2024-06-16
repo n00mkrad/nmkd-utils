@@ -386,6 +386,12 @@ namespace NmkdUtils
         /// <br/>Largely reliable, unless a file was edited without a file size change and without LastWriteTime being changed, which is extremely unlikely. </summary>
         public static string GetPseudoHash (FileInfo file)
         {
+            if(file == null || !file.Exists)
+            {
+                Logger.LogErr($"Failed to get PseudoHash! {(file == null ? "File is null" : $"File does not exist - '{file.FullName}'")}");
+                return "";
+            }
+
             return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
         }
     }
