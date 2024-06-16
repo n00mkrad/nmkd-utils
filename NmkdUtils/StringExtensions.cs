@@ -242,19 +242,6 @@ namespace NmkdUtils
             return new string(censorChar, s.Length);
         }
 
-        /// <summary> Get enum from string (case-insensitive), return <paramref name="fallback"/> if parsing fails </summary>
-        public static TEnum GetEnum<TEnum>(this string enumString, bool ignoreCase = true, TEnum? fallback = null) where TEnum : struct
-        {
-            if (Enum.TryParse(enumString, ignoreCase, out TEnum result))
-            {
-                return result;
-            }
-            else
-            {
-                return fallback.GetValueOrDefault();
-            }
-        }
-
         /// <summary> Limit sting to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the last 3 chars if too long </summary>
         public static string Trunc(this string s, int maxChars, bool ellipsis = true)
         {
