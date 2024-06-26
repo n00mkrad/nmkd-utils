@@ -38,26 +38,44 @@ namespace NmkdUtils
             }
         }
 
+        public class RunConfig
+        {
+            public string Command { get; set; } = "";
+            public int PrintOutputLines { get; set; } = 0;
+            public ProcessPriorityClass? Priority { get; set; } = null;
+            public Func<bool>? Killswitch { get; set; } = null;
+            public int KillswitchCheckIntervalMs = 1000;
+
+            public RunConfig() { }
+
+            public RunConfig(string cmd, int printOutputLines = 0)
+            {
+                Command = cmd;
+                PrintOutputLines = printOutputLines;
+            }
+        }
+
         public class CommandResult
         {
             public string Output { get; set; } = "";
             public string StdOut { get; set; } = "";
             public string StdErr { get; set; } = "";
-            public int ExitCode { get; set; }
+            public int ExitCode { get; set; } = 0;
             public TimeSpan RunTime { get; set; }
         }
 
-        public static string RunCommand(string command) // TODO: out int exitCode ...
+        public static string RunCommand(string command, int printOutputLines = 0)
         {
-            return RunCommandShell(command).Output;
+            return RunCommandShell(new RunConfig(command, printOutputLines)).Output;
         }
 
-        public static string RunCommandWithKillswitch(string command, Func<bool> killswitch, bool printCmd = false)
+        public static CommandResult RunCommandShell(string cmd, int printOutputLines = 0)
         {
-            return RunCommandShell(command, killswitch: killswitch).Output;
+            var cfg = new RunConfig(cmd, printOutputLines);
+            return RunCommandShell(cfg);
         }
 
-        public static CommandResult RunCommandShell(string command, ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal, Func<bool>? killswitch = null)
+        public static CommandResult RunCommandShell(RunConfig cfg)
         {
             var sw = new NmkdStopwatch();
             CommandResult? result = null;
@@ -69,19 +87,19 @@ namespace NmkdUtils
                 if (IsLinux)
                 {
                     tempScript = Path.Combine(Path.GetTempPath(), Path.GetTempFileName()) + ".sh";
-                    File.WriteAllText(tempScript, command);
+                    File.WriteAllText(tempScript, cfg.Command);
                     File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                    command = tempScript;
+                    cfg.Command = tempScript;
                 }
 
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = !IsLinux ? "cmd.exe" : "/bin/bash",
-                    Arguments = !IsLinux ? $"/c {command}" : $"-c {command}",
+                    Arguments = !IsLinux ? $"/c {cfg.Command}" : $"-c {cfg.Command}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
                 };
 
                 Log($"{startInfo.FileName} {startInfo.Arguments}", Level.Verbose);
@@ -121,20 +139,22 @@ namespace NmkdUtils
                     }
                 };
 
+                ProcessPriorityClass? previousParentPrio = cfg.Priority == null ? null : GetOwnProcessPriority();
+                SetOwnProcessPriority(cfg.Priority); // The only reliable way of setting the new child proc's priority is by changing the parent's priority...
                 process.Start();
-                process.PriorityClass = priority;
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
+                SetOwnProcessPriority(previousParentPrio); // ...and afterwards changing the parent's priority back to what it was
 
-                if (killswitch == null)
+                if (cfg.Killswitch == null)
                 {
                     process.WaitForExit();
                 }
                 else
                 {
-                    while (killswitch() == false)
+                    while (cfg.Killswitch() == false)
                     {
-                        Thread.Sleep(1000);
+                        Thread.Sleep(cfg.KillswitchCheckIntervalMs);
 
                         if (process.HasExited)
                             break;
@@ -151,11 +171,16 @@ namespace NmkdUtils
                 // Ensure output and error streams have finished processing
                 Task.WhenAll(outputClosed.Task, errorClosed.Task).Wait();
 
-                result = new CommandResult { Output = output.ToString(), StdOut = stdout.ToString(), StdErr = stderr.ToString(), RunTime = sw.Elapsed };
+                result = new CommandResult { Output = output.ToString(), StdOut = stdout.ToString(), StdErr = stderr.ToString(), ExitCode = process.ExitCode, RunTime = sw.Elapsed };
 
                 if (tempScript.IsNotEmpty())
                 {
                     IoUtils.DeletePath(tempScript);
+                }
+
+                if(cfg.PrintOutputLines > 0)
+                {
+                    Log($"Finished (Code {result.ExitCode}). Output:{Environment.NewLine}...{Environment.NewLine}{string.Join(Environment.NewLine, result.Output.SplitIntoLines().TakeLast(cfg.PrintOutputLines))}");
                 }
             }
             catch (Exception ex)
@@ -192,36 +217,32 @@ namespace NmkdUtils
             return p;
         }
 
-        /// <summary> Count how many instances (including self) of this executable are running </summary>
-        public static int CountExecutableInstances(string exePath = "", bool quiet = true)
+        /// <summary> Count how many instances (including self) of this executable are running. Not super fast but should be ~50ms on a modern machine </summary>
+        public static int CountExecutableInstances(string exePath = "")
         {
             try
             {
                 string currentExecutablePath = exePath.IsNotEmpty() ? exePath : Environment.ProcessPath;
 
-                return Process.GetProcesses().AsParallel().WithDegreeOfParallelism(Environment.ProcessorCount).Select(p => {
+                return Process.GetProcesses().AsParallel().Select(p => {
                     try
                     {
                         return Path.GetFullPath(p.MainModule?.FileName);
                     }
                     catch
                     {
-                        if (!quiet)
-                        {
-                            Log($"Error accessing process {p.Id}");
-                        }
-
                         return null;
                     }
-                }).Count(path => path != null && new FileInfo(path).FullName.Low() == new FileInfo(currentExecutablePath).FullName.Low());
+                }).Count(path => path != null && path == Path.GetFullPath(currentExecutablePath));
             }
             catch (Exception ex)
             {
                 Log(ex, "Error counting executable instances");
-                return 0;
+                return -1;
             }
         }
 
+        /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"/> </summary>
         public static string GetEnvVar(string name, string fallbackValue = "")
         {
             string? value = Environment.GetEnvironmentVariable(name);
@@ -234,10 +255,20 @@ namespace NmkdUtils
             return value;
         }
 
-        public static void SetOwnProcessPriority(ProcessPriorityClass priority = ProcessPriorityClass.BelowNormal)
+        public static ProcessPriorityClass GetOwnProcessPriority()
         {
             using Process self = Process.GetCurrentProcess();
-            self.PriorityClass = priority;
+            return self.PriorityClass;
+        }
+
+        public static void SetOwnProcessPriority(ProcessPriorityClass? priority = ProcessPriorityClass.BelowNormal)
+        {
+            if (priority == null)
+                return;
+
+            using Process self = Process.GetCurrentProcess();
+            self.PriorityClass = priority == null ? ProcessPriorityClass.BelowNormal : (ProcessPriorityClass)priority;
+            Log($"Process priority changed to {self.PriorityClass}", Level.Debug);
         }
     }
 }

@@ -24,6 +24,7 @@ namespace NmkdUtils
             if (n == "rawvideo") return "Raw Video";
 
             // Audio
+            if (n == "eac3") return profile.Contains("+ Dolby Atmos") ? "EAC3 Atmos" : "EAC3";
             if (n == "dts") return profile.IsNotEmpty() ? profile : "DTS";
             if (n == "opus") return "Opus";
             if (n == "truehd") return profile.Contains("Atmos") ? "TrueHD Atmos" : "TrueHD";

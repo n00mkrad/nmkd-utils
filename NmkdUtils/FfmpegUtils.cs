@@ -32,5 +32,26 @@ namespace NmkdUtils
 
             return cmdResult.StdOut;
         }
+
+        /// <summary> Gets the decoded bitrate of a <paramref name="file"/> (or specific stream if <paramref name="streamIndex"/> is used) by demuxing it to NUL </summary>
+        public static int GetKbps(MediaData.MediaObject media, int streamIndex = -1)
+        {
+            return GetKbps(media.File.FullName, streamIndex);
+        }
+
+        /// <summary> Gets the decoded bitrate of a <paramref name="file"/> (or specific stream if <paramref name="streamIndex"/> is used) by demuxing it to NUL </summary>
+        public static int GetKbps(string file, int streamIndex = -1)
+        {
+            string cmd = $"ffmpeg -loglevel panic -stats -y -i {file.Wrap()} -map 0{(streamIndex >= 0 ? $":{streamIndex}" : "")} -c copy -f matroska NUL";
+            var result = OsUtils.RunCommandShell(new OsUtils.RunConfig(cmd));
+            int kbps = result.Output.Split("bitrate=").Last().Split('.').First().GetInt();
+
+            if(kbps <= 0)
+            {
+                Logger.LogErr($"Failed to get bitrate from stream {streamIndex} of '{Path.GetFileName(file)}' (Got {0})");
+            }
+
+            return kbps;
+        }
     }
 }

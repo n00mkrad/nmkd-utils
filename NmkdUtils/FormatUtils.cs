@@ -1,4 +1,8 @@
 ﻿
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace NmkdUtils
 {
     public class FormatUtils
@@ -72,6 +76,68 @@ namespace NmkdUtils
                 if (pixFmt.MatchesWildcard("*p16?e")) return 16;
                 return 0;
             }
+
+            public enum LayoutStringFormat { Raw, Prettier, Numbers }
+            public static string AudioLayout(string ffmpegLayoutName, LayoutStringFormat format = LayoutStringFormat.Raw)
+            {;
+                if(format == LayoutStringFormat.Prettier)
+                {
+                    string s = ffmpegLayoutName.Replace("(", " (");
+                    s = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(s);
+                    return s;
+                }
+
+                if (format == LayoutStringFormat.Numbers)
+                    return ffmpegLayoutName.Replace("mono", "1.0").Replace("stereo", "2.0");
+
+                return ffmpegLayoutName.Trim();
+            }
+        }
+
+        public static string ProgramInfo(string buildTimestamp)
+        {
+            string platform = OsUtils.IsWindows ? "[Windows]" : "[Linux/Other]";
+            string elevated = OsUtils.IsElevated ? " [Elevated]" : "";
+            string buildTime = buildTimestamp.IsEmpty() ? "" : $" [Built {buildTimestamp} UTC]";
+            return $"{platform}{elevated}{buildTime}";
+        }
+
+        public static string NicerStackTrace(string trace)
+        {
+            if (trace.IsEmpty())
+                return "";
+
+            var split = trace.SplitIntoLines();
+
+            for (int i = 0; i < split.Length; i++)
+            {
+                split[i] = Regex.Replace(split[i], @"`\d", "");
+
+                if (split[i].StartsWith("   at ") && split[i].MatchesWildcard("* in *.cs:line*")){
+                    split[i] = Regex.Replace(split[i], @" in .+\\([^\\]+):line", " in $1 - Line");
+                }
+
+                string indentation = new string(' ', (i + 1) * 2);
+                split[i] = $"{indentation}{split[i]}";
+            }
+
+            trace = string.Join(Environment.NewLine, split);
+            trace = trace.Replace("   at ", "");
+            return trace;
+        }
+
+        public static string LastProjectStackItem(string trace)
+        {
+            string appName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
+            var split = trace.SplitIntoLines();
+            var line = split.Where(s => s.StartsWith($"   at {appName}.")).ToList();
+
+            if (line.Count != 0)
+            {
+                return line.First().Replace($"   at {appName}.", "").Split('(')[0].Trim();
+            }
+
+            return "";
         }
     }
 }

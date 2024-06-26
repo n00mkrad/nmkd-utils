@@ -40,5 +40,15 @@ namespace NmkdUtils
                 _ => (long)Math.Round(d),
             };
         }
+
+        public static int RoundToNearestMultiple(this int number, int x)
+        {
+            return (int)Math.Round((double)number / x) * x;
+        }
+
+        public static double RatioTo(this int first, int second)
+        {
+            return (double)Math.Max(first, second) / Math.Min(first, second);
+        }
     }
 }

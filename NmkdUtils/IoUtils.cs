@@ -189,7 +189,7 @@ namespace NmkdUtils
                     return; // Path does not exist
                 }
 
-                if (File.GetAttributes(path).HasFlag(FileAttributes.Directory))
+                if (Directory.Exists(path))
                 {
                     if (recycle)
                     {
@@ -201,7 +201,7 @@ namespace NmkdUtils
                         DeleteDirectory(path: path, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun);
                     }
                 }
-                else
+                else if (File.Exists(path))
                 {
                     DeleteFile(path, recycle, dryRun);
                 }
@@ -348,7 +348,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Transfer "Created" and "Last Modified" timestamps from <paramref name="pathSource"/> to <paramref name="pathTarget"/> </summary>
-        public static bool TransferFileTimestamps(string pathSource, string pathTarget)
+        public static DateTime? TransferFileTimestamps(string pathSource, string pathTarget, bool applyLastAccessedTime = false)
         {
             try
             {
@@ -356,12 +356,18 @@ namespace NmkdUtils
                 var target = new FileInfo(pathTarget);
                 target.CreationTime = source.CreationTime;
                 target.LastWriteTime = source.LastWriteTime;
-                return true;
+
+                if (applyLastAccessedTime)
+                {
+                    target.LastAccessTime = source.LastAccessTime;
+                }
+
+                return target.LastWriteTime;
             }
             catch (Exception ex)
             {
                 Logger.Log(ex, $"Failed to transfer timestamps from {pathSource} to {pathTarget}");
-                return false;
+                return null;
             }
         }
 

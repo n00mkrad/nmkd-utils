@@ -8,6 +8,7 @@ namespace NmkdUtils
         public enum Level { Disabled, Debug, Verbose, Info, Warning, Error }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
+        public static bool PrintLogLevel = true;
         public static bool PrintFullLevelNames = false;
 
         private static BlockingCollection<(string, Level)> _logQueue = new();
@@ -57,6 +58,12 @@ namespace NmkdUtils
             }
         }
 
+        public static void Print (object o)
+        {
+            Console.ResetColor();
+            Console.WriteLine($"{o}");
+        }
+
         public static void LogConditional(object o, bool condition, Level level = Level.Info)
         {
             if (condition)
@@ -75,6 +82,12 @@ namespace NmkdUtils
 
         public static void Log(object o, Level level = Level.Info)
         {
+            if (o is Exception)
+            {
+                Log((Exception)o, "");
+                return;
+            }
+
             if (level != Level.Disabled && (int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
             {
                 _logQueue.Add(($"{o}", level));
@@ -83,7 +96,9 @@ namespace NmkdUtils
 
         public static void Log(Exception e, string note)
         {
-            Log($"{(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{Environment.NewLine}{e.StackTrace}", Level.Error);
+            string trace = e.StackTrace;
+            string location = FormatUtils.LastProjectStackItem(trace);
+            Log($"{(location.IsEmpty() ? "" : $"[{location}] ")}[{e.GetType()}] {(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{Environment.NewLine}{FormatUtils.NicerStackTrace(trace)}", Level.Error);
         }
 
         public static void LogWrn(object o)
@@ -100,6 +115,7 @@ namespace NmkdUtils
         {
             if ((int)level >= (int)ConsoleLogLevel)
             {
+                string msgNoPrefix = msg;
                 var lines = msg.SplitIntoLines();
                 string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(_maxLogTypeStrLen, '.')}]" : $"[{_logLevelNames[level]}]";
 
@@ -111,7 +127,7 @@ namespace NmkdUtils
 
                 string output = string.Join(Environment.NewLine, lines);
                 Console.ForegroundColor = _logLevelColors[level];
-                Console.WriteLine(output);
+                Console.WriteLine(PrintLogLevel ? output : msgNoPrefix);
                 Console.ResetColor();
 
                 OnConsoleWritten?.Invoke(msg);

@@ -1,5 +1,6 @@
 ﻿
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NmkdUtils
@@ -86,6 +87,15 @@ namespace NmkdUtils
                 // Return the filename enclosed in double quotes
                 return $"\"{filename}\"";
             });
+        }
+
+        public static string PascalToSnakeCase(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            var regex = new Regex("(?<=[a-z0-9])[A-Z]|(^[A-Z][a-z0-9]+)");
+            return regex.Replace(input, m => "_" + m.Value.ToLower()).TrimStart('_');
         }
     }
 }
