@@ -50,5 +50,16 @@ namespace NmkdUtils
         {
             return (double)Math.Max(first, second) / Math.Min(first, second);
         }
+
+        public static int Clamp(this int i, int min, int max = int.MaxValue)
+        {
+            if (i < min)
+                i = min;
+
+            if (i > max)
+                i = max;
+
+            return i;
+        }
     }
 }

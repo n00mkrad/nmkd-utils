@@ -1,6 +1,4 @@
-﻿
-
-using System.Collections;
+﻿using System.Collections;
 using System.Diagnostics;
 using System.Text;
 
@@ -65,20 +63,40 @@ namespace NmkdUtils
             return !source.Any(predicate);
         }
 
-        public static string ToStringFlexible(this object o, string nullPlaceholder = "N/A", string joinSeparator = ", ")
+        public static string ToStringFlexible(this object o, string nullPlaceholder = "N/A", string joinSeparator = ", ", int maxListItems = 10)
         {
             if (o is null)
                 return nullPlaceholder;
 
+            if (o is string s)
+                return s;
+
+            int maxItemsRecursion =  (maxListItems - 1).Clamp(2);
+
             if (o is IList list)
-                return $"[{string.Join(joinSeparator, list.Cast<object>().Select(o => o.ToStringFlexible()))}]"; // List elements
-
-            Type type = o.GetType();
-
-            if (type.IsGenericType && type.FullName != null && type.FullName.StartsWith("System.Tuple"))
             {
-                var propNames = type.GetProperties().Where(p => p.Name.StartsWith("Item")).Select(x => x.GetValue(o)?.ToStringFlexible());
-                return $"Tuple[{propNames.Count()}]{{{string.Join(", ", propNames)}}}";
+                string suffix = list.Count > maxListItems ? ", ..." : "";
+                return $"[{string.Join(joinSeparator, list.Cast<object>().Take(maxListItems).Select(item => item.ToStringFlexible()))}{suffix}]";
+            }
+
+            var type = o.GetType();
+
+            if (type.IsGenericType)
+            {
+                var genericTypeDef = type.GetGenericTypeDefinition();
+
+                if (genericTypeDef.FullName.StartsWith("System.Tuple"))
+                {
+                    var props = type.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                    var propNames = props.Where(p => p.Name.StartsWith("Item")).Select(p => p.GetValue(o)?.ToStringFlexible(maxListItems: maxItemsRecursion));
+                    return $"Tuple[{props.Length}]{{{string.Join(", ", propNames)}}}";
+                }
+                else if (genericTypeDef.FullName.StartsWith("System.ValueTuple"))
+                {
+                    var fields = type.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                    var fieldNames = fields.Select(f => f.GetValue(o)?.ToStringFlexible(maxListItems: maxItemsRecursion));
+                    return $"ValueTuple[{fields.Length}]{{{string.Join(", ", fieldNames)}}}";
+                }
             }
 
             return $"{o}";
