@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using NmkdUtils.Structs;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace NmkdUtils
 {
@@ -81,7 +82,7 @@ namespace NmkdUtils
             public int MaxContentLightLevel { get; private set; }
             public int AvgContentLightLevel { get; private set; }
 
-            public ColorMasteringData (JArray frameSideData)
+            public ColorMasteringData(JArray frameSideData)
             {
                 if (frameSideData == null)
                     return;
@@ -89,7 +90,7 @@ namespace NmkdUtils
                 var colorDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Mastering display metadata").FirstOrDefault();
                 var lightDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Content light level metadata").FirstOrDefault();
 
-                if(colorDict != null)
+                if (colorDict != null)
                 {
                     var colorValues = colorDict.ToObject<Dictionary<string, string>>();
                     RedX = new Fraction(colorValues.Get("red_x"));
@@ -102,7 +103,7 @@ namespace NmkdUtils
                     WhiteY = new Fraction(colorValues.Get("white_point_y"));
                 }
 
-                if(lightDict != null)
+                if (lightDict != null)
                 {
                     var lightValues = colorDict.ToObject<Dictionary<string, string>>();
                     MinLuminance = new Fraction(lightValues.Get("min_luminance"));
@@ -166,23 +167,40 @@ namespace NmkdUtils
                 return Print();
             }
 
-            public string Print(int indexPad = 0)
+            public string Print(MediaObject? parentMedia = null)
             {
                 int maxTitleChars = 120;
-                string streamType = Type.ToString();
+                int streamTypePad = parentMedia == null ? 0 : parentMedia.Streams.Max(s => s.Type.ToString().Length);
+                string streamType = Type.ToString().PadRight(streamTypePad);
+                int indexPad = parentMedia == null ? 1 : (parentMedia.Streams.Count - 1).ToString().Length; // Count -1 to account for zero-indexing
                 string str = $"[{Index.ToString().PadLeft(indexPad)}] {streamType}:";
                 var lang = LanguageUtils.GetLang(Language);
 
                 List<string> infos = new();
 
+                string GetBitrateSize(int kbps, TimeSpan? duration, bool parentheses = true)
+                {
+                    if (kbps <= 0 || duration == null || duration?.TotalSeconds <= 0)
+                        return "";
+                    string s = $"{FormatUtils.FileSize(((double)(kbps / 8 * duration?.TotalSeconds)).RoundToLong() * 1024)}";
+                    return parentheses ? $"({s})" : s;
+                }
+
                 string GetBitrateStr(Stream s)
                 {
-                    if (s.Bitrate > 0 && s.BitrateDemuxed > 0)
-                        return s.Bitrate.RatioTo(s.BitrateDemuxed) < 1.1f ? $"{s.BitrateDemuxed} kbps" : $"{s.Bitrate} kbps (metadata), {s.BitrateDemuxed} kbps (measured)";
-                    else if (s.Bitrate > 0 && s.BitrateDemuxed <= 0)
-                        return $"{s.Bitrate} kbps";
-                    else if (s.Bitrate <= 0 && s.BitrateDemuxed > 0)
-                        return $"{s.BitrateDemuxed} kbps";
+                    int br = s.Bitrate;
+                    int brDemux = s.BitrateDemuxed;
+                    TimeSpan? duration = null;
+                    if (s is VideoStream v)
+                        duration = v.Duration;
+                    else if (s is AudioStream a)
+                        duration = a.Duration;
+                    if (br > 0 && brDemux > 0)
+                        return br.RatioTo(brDemux) < 1.1f ? $"{brDemux} kbps" : $"{br} kbps (metadata), {brDemux} kbps (measured) ({brDemux})";
+                    else if (br > 0 && brDemux <= 0)
+                        return $"{br} kbps {GetBitrateSize(br, duration)}".Trim();
+                    else if (br <= 0 && brDemux > 0)
+                        return $"{brDemux} kbps {GetBitrateSize(brDemux, duration)}".Trim();
                     return "";
                 }
 
@@ -190,14 +208,14 @@ namespace NmkdUtils
                 {
                     var v = new VideoStream(this, ((VideoStream)this).FrameData);
                     infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile));
-                    infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "Untitled");
+                    infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add($"{v.Width}x{v.Height}");
                     infos.Add(GetBitrateStr(v));
                     infos.Add($"{v.PixFmt.Up()} ({FormatUtils.Media.BitDepthFromPixFmt(v.PixFmt)}-bit)");
                     infos.Add(v.Hdr ? "HDR" : "");
                     infos.Add(v.DoviProfile >= 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
                     infos.Add(v.Hdr10Plus ? $"HDR10+" : "");
-                    infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS");;
+                    infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS"); ;
                     infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                     infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
                     infos.Add($"SAR {v.Values.Get("sample_aspect_ratio", "?")}");
@@ -207,8 +225,8 @@ namespace NmkdUtils
                 {
                     var a = new AudioStream(this);
                     infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile));
-                    infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "Untitled");
                     infos.Add(lang == null ? "" : lang.Name);
+                    infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add(GetBitrateStr(a));
                     infos.Add($"{a.Channels} Channels");
                     infos.Add(FormatUtils.Media.AudioLayout(a.ChannelLayout, FormatUtils.Media.LayoutStringFormat.Prettier));
@@ -216,9 +234,10 @@ namespace NmkdUtils
                 }
                 else if (Type == CodecType.Subtitle)
                 {
+                    var s = new SubtitleStream(this);
                     infos.Add(Aliases.GetFriendlyCodecName(Codec));
                     infos.Add(lang == null ? "" : lang.Name);
-                    var s = new SubtitleStream(this);
+                    infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add(s.Frames > 0 ? $"{s.Frames} Frames" : "");
                     infos.Add(s.Forced ? "Forced" : "");
                     infos.Add(s.Sdh ? "SDH" : "");
@@ -231,7 +250,8 @@ namespace NmkdUtils
                 else if (Type == CodecType.Attachment)
                 {
                     var at = new AttachmentStream(this);
-                    infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename} ({at.MimeType})");
+                    int filenamePad = parentMedia == null ? 0 : parentMedia.Streams.Where(s => s.Type == CodecType.Attachment).Max(s => ((AttachmentStream)s).Filename.Length);
+                    infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename.PadRight(filenamePad)} ({at.MimeType})");
                 }
 
                 return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
@@ -255,6 +275,14 @@ namespace NmkdUtils
             public string Profile => Values.Get("profile");
             public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
             public bool Hdr10Plus => (FrameData == null || FrameData.SideData == null) ? false : FrameData.SideData.Any(item => item["side_data_type"] != null && item["side_data_type"].ToString().Contains("HDR10+"));
+            public TimeSpan Duration => TimeSpan.TryParseExact(Tags.Get("DURATION", "").Trunc(13, false), @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture, out TimeSpan duration) ? duration : new TimeSpan();
+
+            private TimeSpan GetDurationTs()
+            {
+                string d = Tags.Get("DURATION", "").Trunc(13, false);
+                var ts = TimeSpan.ParseExact(d, @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture);
+                return ts;
+            }
 
             public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; BitrateDemuxed = s.BitrateDemuxed; }
         }
@@ -267,14 +295,9 @@ namespace NmkdUtils
             public int Channels => Values.Get("channels").GetInt();
             public string ChannelLayout => Values.Get("channel_layout", "");
             public bool Atmos => Profile.Contains("+ Dolby Atmos");
-            public TimeSpan Duration => GetDurationTs();
+            public TimeSpan Duration => TimeSpan.TryParseExact(Tags.Get("DURATION", "").Trunc(13, false), @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture, out TimeSpan duration) ? duration : new TimeSpan();
 
             public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; BitrateDemuxed = s.BitrateDemuxed; }
-
-            private TimeSpan GetDurationTs ()
-            {
-                return TimeSpan.TryParse(Tags.Get("DURATION", ""), out TimeSpan duration) ? duration : new TimeSpan();
-            }
         }
 
         public class SubtitleStream : Stream
@@ -330,11 +353,11 @@ namespace NmkdUtils
             /// Use <paramref name="loadFrameData"/> for frame data analysis (e.g. required to detect HDR10+), use <paramref name="demuxMode"/> for accurate bitrate measurements </summary>
             public MediaObject(object file, bool loadFrameData = false, DemuxMode demuxMode = DemuxMode.None)
             {
-                if(file is FileInfo)
+                if (file is FileInfo)
                 {
                     File = (FileInfo)file;
                 }
-                else if(file is string)
+                else if (file is string)
                 {
                     File = new FileInfo((string)file);
                 }
@@ -365,9 +388,9 @@ namespace NmkdUtils
 
                     if (demuxMode != DemuxMode.None)
                     {
-                        foreach(var s in Streams.Where(s => new[] { CodecType.Video, CodecType.Audio }.Contains(s.Type)))
+                        foreach (var s in Streams.Where(s => new[] { CodecType.Video, CodecType.Audio }.Contains(s.Type)))
                         {
-                            if(demuxMode == DemuxMode.All || s.Bitrate <= 0)
+                            if (demuxMode == DemuxMode.All || s.Bitrate <= 0)
                             {
                                 s.BitrateDemuxed = FfmpegUtils.GetKbps(File.FullName, s.Index);
                             }
@@ -408,11 +431,11 @@ namespace NmkdUtils
                 }
             }
 
-            public void Print()
+            public void Print(bool format = true)
             {
                 Logger.Log(File.Name);
                 Logger.Log(Format);
-                Streams.ForEach(s => Logger.Log(s));
+                Streams.ForEach(s => Logger.Log(s.Print(format ? this : null))); // Pass this MediaObject to the Print method for relative stream indexes, padding, etc
             }
         }
     }
