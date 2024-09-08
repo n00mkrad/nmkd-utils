@@ -61,5 +61,10 @@ namespace NmkdUtils
 
             return i;
         }
+
+        public static bool EqualsRoughly(this float a, float b, float tolerance = 0.0001f)
+        {
+            return Math.Abs(a - b) < tolerance;
+        }
     }
 }
