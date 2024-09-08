@@ -1,6 +1,4 @@
-﻿
-using System.Diagnostics;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace NmkdUtils
@@ -8,7 +6,7 @@ namespace NmkdUtils
     public class FormatUtils
     {
         /// <summary> Returns readable file size. Calculates using 1024 as base with <paramref name="binaryCalculation"/>, otherwise 1000. If <paramref name="binaryNotation"/> is true, "KiB" instead of "KB" will be output, etc. </summary>
-        public static string FileSize(long sizeBytes, bool binaryCalculation = true, bool binaryNotation = false)
+        public static string FileSize(long sizeBytes, bool binaryCalculation = true, bool binaryNotation = false, bool noDecimals = false)
         {
             try
             {
@@ -18,7 +16,8 @@ namespace NmkdUtils
                 long bytes = Math.Abs(sizeBytes);
                 int place = Convert.ToInt32(Math.Floor(Math.Log(bytes, mult)));
                 double num = Math.Round(bytes / Math.Pow(mult, place), 1);
-                return ($"{Math.Sign(sizeBytes) * num} {suf[place]}");
+                string s = ($"{Math.Sign(sizeBytes) * num} {suf[place]}");
+                return noDecimals ? s.Split('.').First() : s;
             }
             catch
             {
