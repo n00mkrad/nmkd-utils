@@ -295,5 +295,10 @@ namespace NmkdUtils
             string pattern = includeLeadingSpace ? @"\s*\([^()]*\)" : @"\([^()]*\)";
             return Regex.Replace(s, pattern, "");
         }
+
+        public static string Join<T>(this IEnumerable<T> source, string separator = ", ")
+        {
+            return string.Join(separator, source);
+        }
     }
 }

@@ -2,7 +2,6 @@
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using NmkdUtils.Structs;
-using System.Diagnostics;
 using System.Globalization;
 
 namespace NmkdUtils
@@ -101,6 +100,8 @@ namespace NmkdUtils
                     BlueY = new Fraction(colorValues.Get("blue_y"));
                     WhiteX = new Fraction(colorValues.Get("white_point_x"));
                     WhiteY = new Fraction(colorValues.Get("white_point_y"));
+                    MinLuminance = new Fraction(colorValues.Get("min_luminance"));
+                    MaxLuminance = new Fraction(colorValues.Get("max_luminance"));
                 }
 
                 if (lightDict != null)
@@ -109,6 +110,9 @@ namespace NmkdUtils
                     MinLuminance = new Fraction(lightValues.Get("min_luminance"));
                     MaxLuminance = new Fraction(lightValues.Get("max_luminance"));
                 }
+
+                if (colorDict == null && lightDict == null)
+                    return;
 
                 Logger.Log($"Stream color data: Red {RedX} {RedY}, Green {GreenX} {GreenY}, Blue {BlueX} {BlueY}, White {WhiteX} {WhiteY}, Min Lum {MinLuminance}, Max Lum {MaxLuminance}", Logger.Level.Verbose);
             }
@@ -167,16 +171,33 @@ namespace NmkdUtils
                 return Print();
             }
 
-            public string Print(MediaObject? parentMedia = null)
+            public string Print(MediaObject? parentMedia = null, bool padCodec = false)
             {
-                int maxTitleChars = 120;
+                int maxTitleChars = 120; // Max chars of a stream/format title to display, longer gets truncated
                 int streamTypePad = parentMedia == null ? 0 : parentMedia.Streams.Max(s => s.Type.ToString().Length);
                 string streamType = Type.ToString().PadRight(streamTypePad);
                 int indexPad = parentMedia == null ? 1 : (parentMedia.Streams.Count - 1).ToString().Length; // Count -1 to account for zero-indexing
                 string str = $"[{Index.ToString().PadLeft(indexPad)}] {streamType}:";
-                var lang = LanguageUtils.GetLang(Language);
+                var lang = LanguageUtils.GetLangByCode(Language);
 
                 List<string> infos = new();
+
+                int GetCodecPadding()
+                {
+                    var codecStrings = new List<string>();
+
+                    foreach (var stream in parentMedia.Streams)
+                    {
+                        string profile = "";
+                        if (stream is VideoStream) profile = ((VideoStream)stream).Profile;
+                        else if (stream is AudioStream) profile = ((AudioStream)stream).Profile;
+                        codecStrings.Add(Aliases.GetFriendlyCodecName(stream.Codec, profile));
+                    }
+
+                    return codecStrings.Max(s => s.Length);
+                }
+
+                int codecPadding = padCodec && parentMedia != null ? GetCodecPadding() : 0;
 
                 string GetBitrateSize(int kbps, TimeSpan? duration, bool parentheses = true)
                 {
@@ -207,7 +228,7 @@ namespace NmkdUtils
                 if (Type == CodecType.Video)
                 {
                     var v = new VideoStream(this, ((VideoStream)this).FrameData);
-                    infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile));
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile).PadRight(codecPadding));
                     infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add($"{v.Width}x{v.Height}");
                     infos.Add(GetBitrateStr(v));
@@ -218,13 +239,15 @@ namespace NmkdUtils
                     infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS"); ;
                     infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                     infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
-                    infos.Add($"SAR {v.Values.Get("sample_aspect_ratio", "?")}");
-                    infos.Add($"DAR {v.Values.Get("display_aspect_ratio", "?")}");
+                    infos.Add(v.Values.Get("sample_aspect_ratio").IsNotEmpty() ? $"SAR {v.Values.Get("sample_aspect_ratio")}" : "");
+                    infos.Add(v.Values.Get("display_aspect_ratio").IsNotEmpty() ? $"DAR {v.Values.Get("display_aspect_ratio")}" : "");
+                    infos.Add(v.Tags.Get("filename").IsNotEmpty() ? $"'{v.Tags.Get("filename")}'" : "");
                 }
                 else if (Type == CodecType.Audio)
                 {
                     var a = new AudioStream(this);
-                    infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile));
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile).PadRight(codecPadding));
+                    infos.Add(a.Profile.Contains("Atmos") ? "Dolby Atmos" : "");
                     infos.Add(lang == null ? "" : lang.Name);
                     infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add(GetBitrateStr(a));
@@ -235,7 +258,7 @@ namespace NmkdUtils
                 else if (Type == CodecType.Subtitle)
                 {
                     var s = new SubtitleStream(this);
-                    infos.Add(Aliases.GetFriendlyCodecName(Codec));
+                    infos.Add(Aliases.GetFriendlyCodecName(Codec).PadRight(codecPadding));
                     infos.Add(lang == null ? "" : lang.Name);
                     infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                     infos.Add(s.Frames > 0 ? $"{s.Frames} Frames" : "");
@@ -275,14 +298,7 @@ namespace NmkdUtils
             public string Profile => Values.Get("profile");
             public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
             public bool Hdr10Plus => (FrameData == null || FrameData.SideData == null) ? false : FrameData.SideData.Any(item => item["side_data_type"] != null && item["side_data_type"].ToString().Contains("HDR10+"));
-            public TimeSpan Duration => TimeSpan.TryParseExact(Tags.Get("DURATION", "").Trunc(13, false), @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture, out TimeSpan duration) ? duration : new TimeSpan();
-
-            private TimeSpan GetDurationTs()
-            {
-                string d = Tags.Get("DURATION", "").Trunc(13, false);
-                var ts = TimeSpan.ParseExact(d, @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture);
-                return ts;
-            }
+            public TimeSpan Duration => FfmpegUtils.GetTimespanFromFfprobe(Tags);
 
             public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; BitrateDemuxed = s.BitrateDemuxed; }
         }
@@ -295,7 +311,7 @@ namespace NmkdUtils
             public int Channels => Values.Get("channels").GetInt();
             public string ChannelLayout => Values.Get("channel_layout", "");
             public bool Atmos => Profile.Contains("+ Dolby Atmos");
-            public TimeSpan Duration => TimeSpan.TryParseExact(Tags.Get("DURATION", "").Trunc(13, false), @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture, out TimeSpan duration) ? duration : new TimeSpan();
+            public TimeSpan Duration => FfmpegUtils.GetTimespanFromFfprobe(Tags);
 
             public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; BitrateDemuxed = s.BitrateDemuxed; }
         }

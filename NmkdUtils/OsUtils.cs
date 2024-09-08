@@ -1,10 +1,7 @@
 ﻿using System.Diagnostics;
-using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
-using System.Text.RegularExpressions;
 using static NmkdUtils.Logger;
 
 namespace NmkdUtils
@@ -15,6 +12,7 @@ namespace NmkdUtils
         public static bool IsLinux => !IsWindows;
         public static readonly bool IsElevated;
 
+        public static List<Process> SessionProcesses = new();
 
         static OsUtils()
         {
@@ -38,6 +36,8 @@ namespace NmkdUtils
             }
         }
 
+        public delegate void OutputDelegate(string s);
+
         public class RunConfig
         {
             public string Command { get; set; } = "";
@@ -45,6 +45,9 @@ namespace NmkdUtils
             public ProcessPriorityClass? Priority { get; set; } = null;
             public Func<bool>? Killswitch { get; set; } = null;
             public int KillswitchCheckIntervalMs = 1000;
+            public OutputDelegate? OnStdout;
+            public OutputDelegate? OnStderr;
+            public OutputDelegate? OnOutput;
 
             public RunConfig() { }
 
@@ -66,16 +69,16 @@ namespace NmkdUtils
 
         public static string RunCommand(string command, int printOutputLines = 0)
         {
-            return RunCommandShell(new RunConfig(command, printOutputLines)).Output;
+            return Run(new RunConfig(command, printOutputLines)).Output;
         }
 
         public static CommandResult RunCommandShell(string cmd, int printOutputLines = 0)
         {
             var cfg = new RunConfig(cmd, printOutputLines);
-            return RunCommandShell(cfg);
+            return Run(cfg);
         }
 
-        public static CommandResult RunCommandShell(RunConfig cfg)
+        public static CommandResult Run(RunConfig cfg)
         {
             var sw = new NmkdStopwatch();
             CommandResult? result = null;
@@ -122,6 +125,8 @@ namespace NmkdUtils
                         output.AppendLine(e.Data);
                         stdout.AppendLine(e.Data);
                         Log($"[STDOUT] {e.Data}", Level.Debug);
+                        cfg.OnStdout?.Invoke($"{e.Data}");
+                        cfg.OnOutput?.Invoke($"{e.Data}");
                     }
                 };
 
@@ -136,12 +141,15 @@ namespace NmkdUtils
                         output.AppendLine(e.Data);
                         stderr.AppendLine(e.Data);
                         Log($"[STDERR] {e.Data}", Level.Debug);
+                        cfg.OnStderr?.Invoke($"{e.Data}");
+                        cfg.OnOutput?.Invoke($"{e.Data}");
                     }
                 };
 
                 ProcessPriorityClass? previousParentPrio = cfg.Priority == null ? null : GetOwnProcessPriority();
                 SetOwnProcessPriority(cfg.Priority); // The only reliable way of setting the new child proc's priority is by changing the parent's priority...
                 process.Start();
+                SessionProcesses.Add(process);
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 SetOwnProcessPriority(previousParentPrio); // ...and afterwards changing the parent's priority back to what it was
@@ -178,7 +186,7 @@ namespace NmkdUtils
                     IoUtils.DeletePath(tempScript);
                 }
 
-                if(cfg.PrintOutputLines > 0)
+                if (cfg.PrintOutputLines > 0)
                 {
                     Log($"Finished (Code {result.ExitCode}). Output:{Environment.NewLine}...{Environment.NewLine}{string.Join(Environment.NewLine, result.Output.SplitIntoLines().TakeLast(cfg.PrintOutputLines))}");
                 }
@@ -217,35 +225,55 @@ namespace NmkdUtils
             return p;
         }
 
-        /// <summary> Count how many instances (including self) of this executable are running. Not super fast but should be ~50ms on a modern machine </summary>
-        public static int CountExecutableInstances(string exePath = "")
+        /// <summary> Get all instances (including self, unless <paramref name="excludeSelf"/> is true) of this executable. Should take no more than ~50ms on a modern machine </summary>
+        public static List<Process> GetExecutableInstances(string exePath = "", bool excludeSelf = false)
         {
             try
             {
-                string currentExecutablePath = exePath.IsNotEmpty() ? exePath : Environment.ProcessPath;
+                string? currentExecutablePath = exePath.IsNotEmpty() ? exePath : Environment.ProcessPath;
 
-                return Process.GetProcesses().AsParallel().Select(p => {
+                if (currentExecutablePath.IsEmpty())
+                {
+                    throw new Exception($"No executable path was specified/detected.");
+                }
+
+                int ownPid = Environment.ProcessId;
+
+                return Process.GetProcesses().AsParallel().Where(p =>
+                {
                     try
                     {
-                        return Path.GetFullPath(p.MainModule?.FileName);
+                        string processPath = Path.GetFullPath(p.MainModule?.FileName);
+                        return processPath == Path.GetFullPath(currentExecutablePath) && (!excludeSelf || p.Id != ownPid);
                     }
                     catch
                     {
-                        return null;
+                        return false;
                     }
-                }).Count(path => path != null && path == Path.GetFullPath(currentExecutablePath));
+                }).ToList();
             }
             catch (Exception ex)
             {
-                Log(ex, "Error counting executable instances");
-                return -1;
+                Log(ex, "Error retrieving executable processes");
+                return new List<Process>();
             }
         }
 
+        /// <summary> Count how many instances (including self, unless <paramref name="excludeSelf"/> is true) of this executable are running. </summary>
+        public static int CountExecutableInstances(string exePath = "", bool excludeSelf = false)
+        {
+            return GetExecutableInstances(exePath, excludeSelf).Count;
+        }
+
         /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"/> </summary>
-        public static string GetEnvVar(string name, string fallbackValue = "")
+        public static string GetEnvVar(string name, string fallbackValue = "", bool userScope = false)
         {
             string? value = Environment.GetEnvironmentVariable(name);
+
+            if (value.IsEmpty())
+            {
+                value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User);
+            }
 
             if (value.IsEmpty())
             {

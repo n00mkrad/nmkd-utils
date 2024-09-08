@@ -25,16 +25,26 @@ namespace NmkdUtils
             }
         }
 
-        public static Language GetLang(string code)
+        public static Language GetLangByNameOrCode(string nameOrCode)
         {
-            return GetLang(code, code, code);
+            return GetLangByName(nameOrCode) ?? GetLangByCode(nameOrCode);
         }
 
-        public static Language GetLang(string iso6391, string iso6392, string iso6392B = "")
+        public static Language GetLangByName(string name)
+        {
+            return Languages.Where(l => l.Name.IsNotEmpty() && l.Name.Low() == name.Low()).FirstOrDefault();
+        }
+
+        public static Language GetLangByCode(string code)
+        {
+            return GetLangByCodes(code, code, code);
+        }
+
+        public static Language GetLangByCodes(string iso6391, string iso6392, string iso6392B = "")
         {
             var lang = Languages.Where(l => l.Iso6391.IsNotEmpty() && l.Iso6391 == iso6391).FirstOrDefault();
 
-            if(lang == null && iso6392.IsNotEmpty())
+            if (lang == null && iso6392.IsNotEmpty())
                 lang = Languages.Where(l => l.Iso6392.IsNotEmpty() && l.Iso6392 == iso6392).FirstOrDefault();
 
             if (lang == null && iso6392B.IsNotEmpty())

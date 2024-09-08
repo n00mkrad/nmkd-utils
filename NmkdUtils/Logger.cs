@@ -4,6 +4,14 @@ namespace NmkdUtils
 {
     public class Logger
     {
+        public class Entry
+        {
+            public string Message { get; set; } = "";
+            public Logger.Level LogLevel { get; set; } = Level.Info;
+            public int ShowTwiceTimeout { get; set; } = 0;
+        }
+
+
         public static string LogsDir { get => Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "Logs")).FullName; }
         public enum Level { Disabled, Debug, Verbose, Info, Warning, Error }
         public static Level ConsoleLogLevel = Level.Info;
@@ -11,8 +19,13 @@ namespace NmkdUtils
         public static bool PrintLogLevel = true;
         public static bool PrintFullLevelNames = false;
 
-        private static BlockingCollection<(string, Level)> _logQueue = new();
+        private static BlockingCollection<Entry> _logQueue = new();
         private static Thread _loggingThread;
+
+        private static string _lastLogMessage = string.Empty;
+        private static DateTime _lastLogTime = DateTime.MinValue;
+        private static readonly object _logLock = new();
+
 
         private static readonly Dictionary<Level, ConsoleColor> _logLevelColors = new()
         {
@@ -54,11 +67,11 @@ namespace NmkdUtils
         {
             foreach (var entry in _logQueue.GetConsumingEnumerable())
             {
-                WriteLog(entry.Item1, entry.Item2);
+                WriteLog(entry);
             }
         }
 
-        public static void Print (object o)
+        public static void Print(object o)
         {
             Console.ResetColor();
             Console.WriteLine($"{o}");
@@ -80,7 +93,7 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(object o, Level level = Level.Info)
+        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0)
         {
             if (o is Exception)
             {
@@ -90,7 +103,8 @@ namespace NmkdUtils
 
             if (level != Level.Disabled && (int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
             {
-                _logQueue.Add(($"{o}", level));
+                var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout };
+                _logQueue.Add(logEntry);
             }
         }
 
@@ -111,8 +125,30 @@ namespace NmkdUtils
             Log(o, Level.Error);
         }
 
-        public static void WriteLog(string msg, Level level)
+        public static void WriteLog(Entry entry)
         {
+            string msg = entry.Message;
+            Level level = entry.LogLevel;
+
+            bool shouldLog;
+
+            lock (_logLock)
+            {
+                shouldLog = !(msg == _lastLogMessage && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout);
+
+                if (shouldLog)
+                {
+                    _lastLogMessage = msg;
+                    _lastLogTime = DateTime.Now;
+                }
+            }
+
+            if (!shouldLog)
+                return;
+
+            _lastLogMessage = msg;
+            _lastLogTime = DateTime.Now;
+
             if ((int)level >= (int)ConsoleLogLevel)
             {
                 string msgNoPrefix = msg;
@@ -172,7 +208,7 @@ namespace NmkdUtils
             }
         }
 
-        public static void WaitForEmptyQueue ()
+        public static void WaitForEmptyQueue()
         {
             Thread.Sleep(1);
 
@@ -182,4 +218,5 @@ namespace NmkdUtils
             }
         }
     }
+
 }

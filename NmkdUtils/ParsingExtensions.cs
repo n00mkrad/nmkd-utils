@@ -16,13 +16,14 @@ namespace NmkdUtils
                 return result;
             }
 
+            Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}");
+
             if (fallback.HasValue)
             {
                 return fallback.Value;
             }
             else
             {
-                Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.");
                 return (T)Enum.GetValues(typeof(T)).GetValue(0);
             }
         }

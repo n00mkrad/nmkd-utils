@@ -1,5 +1,7 @@
 ﻿
 
+using System.Globalization;
+
 namespace NmkdUtils
 {
     public class FfmpegUtils
@@ -43,7 +45,7 @@ namespace NmkdUtils
         public static int GetKbps(string file, int streamIndex = -1)
         {
             string cmd = $"ffmpeg -loglevel panic -stats -y -i {file.Wrap()} -map 0{(streamIndex >= 0 ? $":{streamIndex}" : "")} -c copy -f matroska NUL";
-            var result = OsUtils.RunCommandShell(new OsUtils.RunConfig(cmd));
+            var result = OsUtils.Run(new OsUtils.RunConfig(cmd));
             int kbps = result.Output.Split("bitrate=").Last().Split('.').First().GetInt();
 
             if(kbps <= 0)
@@ -52,6 +54,31 @@ namespace NmkdUtils
             }
 
             return kbps;
+        }
+
+        public static TimeSpan GetTimespanFromFfprobe(Dictionary<string, string> tags, int fallbackMs = 0)
+        {
+            if(tags == null)
+                return TimeSpan.FromMilliseconds(fallbackMs);
+
+            string d = tags.Where(tags => tags.Key.StartsWith("DURATION")).Select(tags => tags.Value).FirstOrDefault();
+            return GetTimespanFromFfprobe(d, fallbackMs);
+        }
+
+        public static TimeSpan GetTimespanFromFfprobe(string ffprobeDuration, int fallbackMs = 0)
+        {
+            var fallback = TimeSpan.FromMilliseconds(fallbackMs);
+
+            if (ffprobeDuration.IsEmpty())
+                return fallback;
+
+            string durationStr = ffprobeDuration.Trim().Trunc(13, false);
+            bool parsed = TimeSpan.TryParseExact(durationStr, @"hh\:mm\:ss\.FFFF", CultureInfo.InvariantCulture, out TimeSpan duration);
+
+            if (CodeUtils.Assert(!parsed, () => Logger.Log($"Failed to parse '{durationStr}' to TimeSpan.", Logger.Level.Verbose)))
+                return fallback;
+
+            return duration;
         }
     }
 }

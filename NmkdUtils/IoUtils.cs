@@ -372,19 +372,19 @@ namespace NmkdUtils
         }
 
         /// <summary> Set "Created" and "Last Modified" timestamps of a <paramref name="file"/> to <paramref name="timestamp"/> </summary>
-        public static bool SetFileTimestamps(DateTime timestamp, string file)
+        public static DateTime? SetFileTimestamps(DateTime timestamp, string file)
         {
             try
             {
                 var target = new FileInfo(file);
                 target.CreationTime = timestamp;
                 target.LastWriteTime = timestamp;
-                return true;
+                return timestamp;
             }
             catch (Exception ex)
             {
-                Logger.Log(ex, $"Failed to set timestamp son {file}");
-                return false;
+                Logger.Log(ex, $"Failed to set timestamps on {file}");
+                return null;
             }
         }
 
