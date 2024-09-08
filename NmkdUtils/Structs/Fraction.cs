@@ -4,14 +4,18 @@ namespace NmkdUtils.Structs
 {
     public struct Fraction
     {
-        public int Numerator { get; private set; }
-        public int Denominator { get; private set; }
+        public int Numerator { get; private set; } = 0;
+        public int Denominator { get; private set; } = 1;
 
         public static Fraction Zero => new Fraction(0, 1);
 
         public Fraction(string s)
         {
             string[] split = s.Split('/');
+
+            if (split.Length != 2)
+                return;
+
             Initialize(split[0].GetInt(), split[1].GetInt());
         }
 
