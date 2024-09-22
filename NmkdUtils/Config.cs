@@ -22,7 +22,7 @@ namespace NmkdUtils
 
         static ConfigMgr()
         {
-            CfgFile = Path.Combine(AppContext.BaseDirectory, "config.json");
+            CfgFile = Path.Combine(PathUtils.ExeDir, "config.json");
         }
 
         public static void Read()

@@ -4,15 +4,14 @@ namespace NmkdUtils
 {
     public class WebUtils
     {
-        private static string _cacheDir = "";
-        public static string CacheDir { get => _cacheDir; set { Directory.CreateDirectory(value); _cacheDir = value; } }
+        public static string CacheDir = "";
         public static string CachePfxHttp = "http_";
 
         private static HttpClient _http = new();
 
         static WebUtils ()
         {
-            CacheDir = Path.Combine(AppContext.BaseDirectory, "Cache");
+            CacheDir = PathUtils.GetCommonSubdir(PathUtils.CommonDir.Cache);
         }
 
         public static bool IsHttpResponseCachable(HttpStatusCode statusCode)

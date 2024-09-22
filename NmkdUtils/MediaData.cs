@@ -132,6 +132,7 @@ namespace NmkdUtils
             public string Title => Tags.Get("title", "");
             public int Bitrate => (Values.Get("bit_rate").IsNotEmpty() ? Values.Get("bit_rate", "0").GetInt() : Tags.Get("BPS", "0").GetInt()) / 1024;
             public string Language => Tags.Get("language", "");
+            public DateTime CreationTime => DateTime.Parse(Tags.Get("creation_time", ""), null, DateTimeStyles.RoundtripKind);
             public bool Default => Disposition.Get("default") == 1;
 
             [JsonExtensionData]

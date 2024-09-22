@@ -12,7 +12,7 @@ namespace NmkdUtils
         }
 
 
-        public static string LogsDir { get => Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "Logs")).FullName; }
+        public static string LogsDir { get; private set; }
         public enum Level { Disabled, Debug, Verbose, Info, Warning, Error }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
@@ -53,6 +53,7 @@ namespace NmkdUtils
 
         static Logger()
         {
+            LogsDir = PathUtils.GetCommonSubdir(PathUtils.CommonDir.Logs);
             _loggingThread = new Thread(new ThreadStart(ProcessLogQueue)) { IsBackground = true };
             _loggingThread.Start();
         }
