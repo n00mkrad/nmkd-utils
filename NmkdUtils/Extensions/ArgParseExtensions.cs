@@ -21,10 +21,15 @@ namespace NmkdUtils.Extensions
             Logger.Log(opts.GetHelpStr());
         }
 
-        public static string GetHelpStr(this Options opts)
+        public static string GetHelpStr(this Options opts, bool pad = true, bool linebreaks = false, bool newLines = false)
         {
             var lines = new List<string>();
             var lengths = new List<int>();
+
+            if (newLines)
+            {
+                lines.Add("");
+            }
 
             foreach (var opt in opts.OptionsSet)
             {
@@ -39,11 +44,25 @@ namespace NmkdUtils.Extensions
             {
                 var names = opt.GetNames().Select(s => s == opt.GetNames().First() ? $"-{s}".Replace("-<>", looseStr) : $"--{s}").ToList();
                 if (names.Contains(looseStr) && !opts.PrintLooseArgs) continue;
+                string v = opt.OptionValueType == NDesk.Options.OptionValueType.None ? "" : " <VALUE>";
                 string desc = opt.Description.IsEmpty() ? "?" : opt.Description;
-                lines.Add($"{names.Join().PadRight(maxLen)} : {desc}");
+                lines.Add(pad ? $"{names.Join().PadRight(maxLen)}{v} : {desc}" : $"{names.Join()}{v} : {desc}");
+
+                if(newLines)
+                {
+                    lines.Add("");
+                    lines.Add("");
+                }
             }
 
-            return $"Usage:{Environment.NewLine}{PathUtils.ExeName} {opts.BasicUsage}{Environment.NewLine}{lines.Join(Environment.NewLine)}{Environment.NewLine}";
+            string s = $"Usage:{Environment.NewLine}{PathUtils.ExeName} {opts.BasicUsage}{Environment.NewLine}{lines.Join(Environment.NewLine)}{Environment.NewLine}";
+
+            if(linebreaks)
+            {
+                s = s.Replace(" : ", Environment.NewLine);
+            }
+
+            return s;
         }
 
         public static void AddHelpArgIfNotPresent(this Options opts)
