@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-
+﻿
 namespace NmkdUtils
 {
     public class RollingAverage<T> where T : struct
     {
         public int CurrentSize { get => _values.Count; }
+        public double Average { get => GetAverage(); }
 
         private Queue<T> _values;
         public Queue<T> Queue { get => _values; }
@@ -30,6 +28,11 @@ namespace NmkdUtils
 
         public double GetAverage()
         {
+            if (_values == null || _values.Count == 0)
+            {
+                return 0d;
+            }
+
             // Convert the values to double before averaging, this is necessary because Average() does not work directly on generic types
             return _values.Select(val => Convert.ToDouble(val)).Average();
         }
@@ -64,6 +67,7 @@ namespace NmkdUtils
     public class RollingAverageBool
     {
         public int CurrentSize { get => _values.Count; }
+        public double Average { get => GetAverage(); }
 
         private Queue<bool> _values;
         public Queue<bool> Queue { get => _values; }
@@ -87,9 +91,10 @@ namespace NmkdUtils
 
         public double GetAverage()
         {
-            // Convert the values to double before averaging, this is necessary because Average() does not work directly on generic types
-            if (!_values.Any())
-                return 0f;
+            if (_values == null || _values.Count == 0)
+            {
+                return 0d;
+            }
 
             return _values.Select(val => val == true ? 1d : 0d).Average();
         }
