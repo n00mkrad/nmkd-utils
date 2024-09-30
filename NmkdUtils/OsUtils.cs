@@ -80,7 +80,7 @@ namespace NmkdUtils
 
         public static CommandResult Run(RunConfig cfg)
         {
-            var sw = new NmkdStopwatch();
+            var sw = Stopwatch.StartNew();
             CommandResult? result = null;
 
             try

@@ -4,9 +4,12 @@ namespace NmkdUtils
 {
     public static class ParsingExtensions
     {
-        public static T GetEnum<T>(this string value, bool ignoreCase = true, bool removeHyphensUnderscores = false, T? fallback = null) where T : struct
+        /// <summary>
+        /// Gets the enum value from a string. If not found, returns <paramref name="fallback"/> if provided. <paramref name="flexible"/> removes all hyphens and underscores before parsing
+        /// </summary>
+        public static T GetEnum<T>(this string value, bool ignoreCase = true, bool flexible = false, T? fallback = null) where T : struct
         {
-            if (removeHyphensUnderscores)
+            if (flexible)
             {
                 value = value.Replace("-", "").Replace("_", "");
             }
