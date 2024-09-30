@@ -8,6 +8,7 @@ namespace NmkdUtils
 {
     public class OsUtils
     {
+        public static bool AllowProcessCreation = true;
         public static readonly bool IsWindows;
         public static bool IsLinux => !IsWindows;
         public static readonly bool IsElevated;
@@ -64,7 +65,7 @@ namespace NmkdUtils
             public string StdOut { get; set; } = "";
             public string StdErr { get; set; } = "";
             public int ExitCode { get; set; } = 0;
-            public TimeSpan RunTime { get; set; }
+            public TimeSpan RunTime { get; set; } = TimeSpan.FromSeconds(0);
         }
 
         public static string RunCommand(string command, int printOutputLines = 0)
@@ -80,6 +81,9 @@ namespace NmkdUtils
 
         public static CommandResult Run(RunConfig cfg)
         {
+            if (!AllowProcessCreation)
+                return new CommandResult { ExitCode = -1 };
+
             var sw = Stopwatch.StartNew();
             CommandResult? result = null;
 
