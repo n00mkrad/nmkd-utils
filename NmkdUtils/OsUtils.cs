@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
+using static NmkdUtils.Data.OsData;
 using static NmkdUtils.Logger;
 
 namespace NmkdUtils
@@ -42,6 +43,7 @@ namespace NmkdUtils
         public class RunConfig
         {
             public string Command { get; set; } = "";
+            public bool PrintExitCode { get; set; } = false;
             public int PrintOutputLines { get; set; } = 0;
             public ProcessPriorityClass? Priority { get; set; } = null;
             public Func<bool>? Killswitch { get; set; } = null;
@@ -52,10 +54,11 @@ namespace NmkdUtils
 
             public RunConfig() { }
 
-            public RunConfig(string cmd, int printOutputLines = 0)
+            public RunConfig(string cmd, int printOutputLines = 0, bool printExitCode = false)
             {
                 Command = cmd;
                 PrintOutputLines = printOutputLines;
+                PrintExitCode = printExitCode;
             }
         }
 
@@ -68,15 +71,14 @@ namespace NmkdUtils
             public TimeSpan RunTime { get; set; } = TimeSpan.FromSeconds(0);
         }
 
-        public static string RunCommand(string command, int printOutputLines = 0)
+        public static string RunCommand(string command, int printOutputLines = 0, bool printExitCode = false)
         {
-            return Run(new RunConfig(command, printOutputLines)).Output;
+            return Run(new RunConfig(command, printOutputLines, printExitCode)).Output;
         }
 
-        public static CommandResult RunCommandShell(string cmd, int printOutputLines = 0)
+        public static CommandResult RunCommandShell(string cmd, int printOutputLines = 0, bool printExitCode = false)
         {
-            var cfg = new RunConfig(cmd, printOutputLines);
-            return Run(cfg);
+            return Run(new RunConfig(cmd, printOutputLines, printExitCode));
         }
 
         public static CommandResult Run(RunConfig cfg)
@@ -91,18 +93,17 @@ namespace NmkdUtils
             {
                 string tempScript = "";
 
-                if (IsLinux)
-                {
-                    tempScript = Path.Combine(Path.GetTempPath(), Path.GetTempFileName()) + ".sh";
-                    File.WriteAllText(tempScript, cfg.Command);
-                    File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                    cfg.Command = tempScript;
-                }
+#if Linux
+                tempScript = Path.Combine(Path.GetTempPath(), Path.GetTempFileName()) + ".sh";
+                File.WriteAllText(tempScript, cfg.Command);
+                File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                cfg.Command = tempScript;
+#endif
 
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = !IsLinux ? "cmd.exe" : "/bin/bash",
-                    Arguments = !IsLinux ? $"/c {cfg.Command}" : $"-c {cfg.Command}",
+                    Arguments = !IsLinux ? $"/S /C {cfg.Command.Wrap()}" : $"-c {cfg.Command}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -128,9 +129,9 @@ namespace NmkdUtils
                     {
                         output.AppendLine(e.Data);
                         stdout.AppendLine(e.Data);
-                        Log($"[STDOUT] {e.Data}", Level.Debug);
-                        cfg.OnStdout?.Invoke($"{e.Data}");
-                        cfg.OnOutput?.Invoke($"{e.Data}");
+                        Log($"[OUT] {e.Data}", Level.Debug);
+                        cfg.OnStdout?.Invoke(e.Data);
+                        cfg.OnOutput?.Invoke(e.Data);
                     }
                 };
 
@@ -144,9 +145,9 @@ namespace NmkdUtils
                     {
                         output.AppendLine(e.Data);
                         stderr.AppendLine(e.Data);
-                        Log($"[STDERR] {e.Data}", Level.Debug);
-                        cfg.OnStderr?.Invoke($"{e.Data}");
-                        cfg.OnOutput?.Invoke($"{e.Data}");
+                        Log($"[ERR] {e.Data}", Level.Debug);
+                        cfg.OnStderr?.Invoke(e.Data);
+                        cfg.OnOutput?.Invoke(e.Data);
                     }
                 };
 
@@ -190,9 +191,18 @@ namespace NmkdUtils
                     IoUtils.DeletePath(tempScript);
                 }
 
-                if (cfg.PrintOutputLines > 0)
+                string logMsg = cfg.PrintExitCode ? $"Finished (Code {result.ExitCode})." : "";
+
+                if (cfg.PrintOutputLines > 0 && result.Output.IsNotEmpty())
                 {
-                    Log($"Finished (Code {result.ExitCode}). Output:{Environment.NewLine}...{Environment.NewLine}{string.Join(Environment.NewLine, result.Output.SplitIntoLines().TakeLast(cfg.PrintOutputLines))}");
+                    var lines = result.Output.SplitIntoLines();
+                    string p = lines.Length > cfg.PrintOutputLines ? $"...{Environment.NewLine}" : "";
+                    logMsg += $" Process Output:{Environment.NewLine}{p}{string.Join(Environment.NewLine, lines.TakeLast(cfg.PrintOutputLines))}";
+                }
+
+                if (logMsg.IsNotEmpty())
+                {
+                    Log(logMsg.Trim());
                 }
             }
             catch (Exception ex)
@@ -301,6 +311,33 @@ namespace NmkdUtils
             using Process self = Process.GetCurrentProcess();
             self.PriorityClass = priority == null ? ProcessPriorityClass.BelowNormal : (ProcessPriorityClass)priority;
             Log($"Process priority changed to {self.PriorityClass}", Level.Debug);
+        }
+
+        public static string[] GetPathExecutables(string name)
+        {
+            var whereOutput = RunCommand($"where {name.Wrap()}").SplitIntoLines();
+
+            if (whereOutput == null || whereOutput.Length < 1)
+                return [];
+
+            return whereOutput.Where(File.Exists).ToArray();
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        public enum WinMessage { Close, Minimize, Maximize, Restore, CloseX };
+
+        public static void SendWinMessage(Process proc, WinMessage msg)
+        {
+            if (proc == null || msg == (WinMessage)(-1))
+                return;
+
+            if (msg == WinMessage.Close) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            else if (msg == WinMessage.Minimize) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_MINIMIZE, IntPtr.Zero);
+            else if (msg == WinMessage.Maximize) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_MAXIMIZE, IntPtr.Zero);
+            else if (msg == WinMessage.Restore) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_RESTORE, IntPtr.Zero);
+            else if (msg == WinMessage.CloseX) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_CLOSE, IntPtr.Zero);
         }
     }
 }
