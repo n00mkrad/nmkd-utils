@@ -9,20 +9,23 @@ namespace NmkdUtils
             public string Message { get; set; } = "";
             public Logger.Level LogLevel { get; set; } = Level.Info;
             public int ShowTwiceTimeout { get; set; } = 0;
+            public string? ReplaceWildcard { get; set; } = null;
         }
 
 
         public static string LogsDir { get; private set; }
-        public enum Level { Disabled, Debug, Verbose, Info, Warning, Error }
+        public enum Level { Debug, Verbose, Info, Warning, Error, None }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
         public static bool PrintLogLevel = true;
         public static bool PrintFullLevelNames = false;
+        public static List<Level> DisabledLevels = [];
 
         private static BlockingCollection<Entry> _logQueue = new();
         private static Thread _loggingThread;
 
-        private static string _lastLogMessage = string.Empty;
+        public static string LastLogMsg = string.Empty;
+        public static string LastLogMsgCon = string.Empty;
         private static DateTime _lastLogTime = DateTime.MinValue;
         private static readonly object _logLock = new();
 
@@ -94,7 +97,7 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0)
+        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null)
         {
             if (o is Exception)
             {
@@ -102,18 +105,18 @@ namespace NmkdUtils
                 return;
             }
 
-            if (level != Level.Disabled && (int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
+            if (level != Level.None && (int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
             {
-                var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout };
+                var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout, ReplaceWildcard = replaceWildcard };
                 _logQueue.Add(logEntry);
             }
         }
 
-        public static void Log(Exception e, string note)
+        public static void Log(Exception e, string note, bool printTrace = true)
         {
-            string trace = e.StackTrace;
-            string location = FormatUtils.LastProjectStackItem(trace);
-            Log($"{(location.IsEmpty() ? "" : $"[{location}] ")}[{e.GetType()}] {(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{Environment.NewLine}{FormatUtils.NicerStackTrace(trace)}", Level.Error);
+            string trace = e.StackTrace ?? "";
+            string location = trace.IsEmpty() ? "Unknown Location" : FormatUtils.LastProjectStackItem(trace);
+            Log($"{(location.IsEmpty() ? "" : $"[{location}] ")}[{e.GetType()}] {(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{(printTrace ? Environment.NewLine + FormatUtils.NicerStackTrace(trace) : "")}", Level.Error);
         }
 
         public static void LogWrn(object o)
@@ -131,15 +134,20 @@ namespace NmkdUtils
             string msg = entry.Message;
             Level level = entry.LogLevel;
 
+            if(DisabledLevels.Contains(level))
+            {
+                return;
+            }
+
             bool shouldLog;
 
             lock (_logLock)
             {
-                shouldLog = !(msg == _lastLogMessage && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout);
+                shouldLog = !(msg == LastLogMsg && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout);
 
                 if (shouldLog)
                 {
-                    _lastLogMessage = msg;
+                    LastLogMsg = msg;
                     _lastLogTime = DateTime.Now;
                 }
             }
@@ -147,7 +155,7 @@ namespace NmkdUtils
             if (!shouldLog)
                 return;
 
-            _lastLogMessage = msg;
+            LastLogMsg = msg;
             _lastLogTime = DateTime.Now;
 
             if ((int)level >= (int)ConsoleLogLevel)
@@ -163,10 +171,20 @@ namespace NmkdUtils
                 }
 
                 string output = string.Join(Environment.NewLine, lines);
+                string text = PrintLogLevel ? output : msgNoPrefix;
                 Console.ForegroundColor = _logLevelColors[level];
-                Console.WriteLine(PrintLogLevel ? output : msgNoPrefix);
-                Console.ResetColor();
+                
+                if(entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard))
+                {
+                    CliUtils.ReplaceLastConsoleLine(text);
+                }
+                else
+                {
+                    Console.WriteLine(text);
+                }
 
+                Console.ResetColor();
+                LastLogMsgCon = msg;
                 OnConsoleWritten?.Invoke(msg);
                 OnConsoleWrittenWithLvl?.Invoke(output);
             }
