@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using NmkdUtils.Structs;
 using System.Globalization;
+using System.IO;
 
 namespace NmkdUtils
 {
@@ -322,6 +323,7 @@ namespace NmkdUtils
             public int Frames => GetNumberOfFrames();
             public bool Forced => Disposition.Get("forced") == 1;
             public bool Sdh => Disposition.Get("hearing_impaired") == 1;
+            public bool TextBased => new string[] { "subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text" }.Contains(Codec);
 
             public SubtitleStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
 
@@ -355,9 +357,9 @@ namespace NmkdUtils
         public class MediaObject
         {
             public enum DemuxMode { All, StreamsWithoutKbpsMetadata, None }
-            public JObject RawJson { get; set; }
+            public JObject? RawJson { get; set; } = null;
             public FileInfo? File { get; set; }
-            public List<Stream> Streams { get; set; } = new List<Stream>();
+            public List<Stream> Streams { get; set; } = [];
             public Format Format { get; set; } = new Format();
             [JsonIgnore] public List<VideoStream> VidStreams => Streams.Where(s => s is VideoStream).Select(s => (VideoStream)s).ToList();
             [JsonIgnore] public List<AudioStream> AudStreams => Streams.Where(s => s is AudioStream).Select(s => (AudioStream)s).ToList();
@@ -366,9 +368,12 @@ namespace NmkdUtils
 
             public MediaObject() { }
 
-            /// <summary> Create a new <see cref="MediaObject"/> from either a <see cref="FileInfo"/> or a <see cref="String"/>. 
-            /// Use <paramref name="loadFrameData"/> for frame data analysis (e.g. required to detect HDR10+), use <paramref name="demuxMode"/> for accurate bitrate measurements </summary>
-            public MediaObject(object file, bool loadFrameData = false, DemuxMode demuxMode = DemuxMode.None)
+            /// <summary>
+            /// Creates a new <see cref="MediaObject"/> from either a <see cref="FileInfo"/> or a <see cref="String"/>.<br/>
+            /// Use <paramref name="loadFrameData"/> for frame data analysis (e.g. required to detect HDR10+), use <paramref name="demuxMode"/> for accurate bitrate measurements.<br/>
+            /// Control demuxing progress prints with <paramref name="demuxPrints"/>.
+            /// </summary>
+            public MediaObject(object file, bool loadFrameData = false, DemuxMode demuxMode = DemuxMode.None, bool demuxPrints = false)
             {
                 if (file is FileInfo)
                 {
@@ -380,16 +385,11 @@ namespace NmkdUtils
                 }
                 else
                 {
-                    Logger.LogErr($"{nameof(MediaObject)} can only be created from a {nameof(FileInfo)} or a {nameof(String)} object.");
+                    Logger.LogErr($"{nameof(MediaObject)} can only be created from a {nameof(FileInfo)} or a {nameof(String)} object. You tried to create it from a {file.GetType()} object.");
                     return;
                 }
 
-                Load(File.FullName, loadFrameData, demuxMode);
-            }
-
-            private void Load(string path, bool loadFrameData, DemuxMode demuxMode)
-            {
-                string json = FfmpegUtils.GetFfprobeOutputCached(path);
+                string json = FfmpegUtils.GetFfprobeOutputCached(File.FullName);
                 try
                 {
                     RawJson = JObject.Parse(json);
@@ -409,6 +409,11 @@ namespace NmkdUtils
                         {
                             if (demuxMode == DemuxMode.All || s.Bitrate <= 0)
                             {
+                                if (demuxPrints)
+                                {
+                                    Logger.Log($"Demuxing stream #{s.Index} to get actual bitrate{(File.Length / 1024f / 1024f > 100f ? " - This could take a while" : "")}");
+                                }
+
                                 s.BitrateDemuxed = FfmpegUtils.GetKbps(File.FullName, s.Index);
                             }
                         }
