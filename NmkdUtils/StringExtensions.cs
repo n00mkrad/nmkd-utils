@@ -252,7 +252,7 @@ namespace NmkdUtils
 
             if (ellipsis && s.Length > maxChars)
             {
-                str += "…";
+                str += "...";
             }
 
             return str;
