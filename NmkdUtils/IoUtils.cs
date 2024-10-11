@@ -21,39 +21,6 @@ namespace NmkdUtils
             return null;
         }
 
-        public static bool IsFileValid(string path)
-        {
-            if (path.IsEmpty())
-                return false;
-
-            if (!File.Exists(path))
-                return false;
-
-            return true;
-        }
-
-        public static bool IsDirValid(string path)
-        {
-            if (path.IsEmpty())
-                return false;
-
-            if (!Directory.Exists(path))
-                return false;
-
-            return true;
-        }
-
-        public static bool IsPathValid(string path)
-        {
-            if (path.IsEmpty())
-                return false;
-
-            if (IsPathDirectory(path) == true)
-                return IsDirValid(path);
-            else
-                return IsFileValid(path);
-        }
-
         /// <summary> Get file paths sorted by filename </summary>
         public static string[] GetFilesSorted(string path, bool recursive = false, string pattern = "*")
         {
@@ -133,7 +100,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Sends a file to the recycle bin </summary>
-        public static bool RecycleFile (string path)
+        public static bool RecycleFile(string path)
         {
             try
             {
@@ -343,7 +310,7 @@ namespace NmkdUtils
             {
                 Console.WriteLine("An error occurred while reading the file: " + e.Message);
             }
-        
+
             return new List<string>();
         }
 
@@ -390,15 +357,132 @@ namespace NmkdUtils
 
         /// <summary> A pseudo-hash built purely from the file metadata, thus not needing almost zero CPU or I/O resources no matter how big the file is.
         /// <br/>Largely reliable, unless a file was edited without a file size change and without LastWriteTime being changed, which is extremely unlikely. </summary>
-        public static string GetPseudoHash (FileInfo file)
+        public static string GetPseudoHash(FileInfo file)
         {
-            if(file == null || !file.Exists)
+            if (file == null || !file.Exists)
             {
                 Logger.LogErr($"Failed to get PseudoHash! {(file == null ? "File is null" : $"File does not exist - '{file.FullName}'")}");
                 return "";
             }
 
             return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
+        }
+
+        /// <summary> Free disk space on the drive of <paramref name="path"/>. If it fails (e.g. invalid path passed), <paramref name="fallback"/> is returned instead. </summary>
+        public static long GetFreeDiskSpace(string path, long fallback = -1, bool log = true)
+        {
+            try
+            {
+                DriveInfo drive = new DriveInfo(Path.GetPathRoot(path));
+                return drive.AvailableFreeSpace;
+            }
+            catch (Exception ex)
+            {
+                if (log)
+                {
+                    Logger.Log(ex, $"Failed to get free disk space for '{path}'");
+                }
+
+                return -1;
+            }
+        }
+
+        /// <summary> Free disk space on the drive of <paramref name="path"/> in GiB (or GB if <paramref name="divisor"/> is set to 1000). If it fails (e.g. invalid path passed), <paramref name="fallback"/> is returned instead. </summary>
+        public static float GetFreeDiskSpaceGb(string path, float fallback = -1f, float divisor = 1024f, bool log = true)
+        {
+            float f = GetFreeDiskSpace(path, -1, log) / divisor / divisor / divisor;
+            return f == -1 ? fallback : f;
+        }
+
+        public enum ExistMode
+        {
+            MustExist,
+            MustNotExist,
+            NotEmpty,
+            Irrelevant
+        }
+
+        public enum PathType
+        {
+            File,
+            Dir,
+            Irrelevant
+        }
+
+        public static bool ValidateFilePath(string path, ExistMode existMode = ExistMode.Irrelevant)
+        {
+            if (existMode == ExistMode.MustExist && !File.Exists(path))
+                return false;
+
+            if (existMode == ExistMode.MustNotExist && File.Exists(path))
+                return false;
+
+            if (existMode == ExistMode.NotEmpty && (!File.Exists(path) || new FileInfo(path).Length == 0))
+                return false;
+
+            return true;
+        }
+
+        public static bool ValidateDirPath(string path, ExistMode existMode = ExistMode.Irrelevant)
+        {
+            if (existMode == ExistMode.MustExist && !Directory.Exists(path))
+                return false;
+
+            if (existMode == ExistMode.MustNotExist && Directory.Exists(path))
+                return false;
+
+            if (existMode == ExistMode.NotEmpty && (!Directory.Exists(path) || (Directory.GetFiles(path).Length == 0 && Directory.GetDirectories(path).Length == 0)))
+                return false;
+
+            return true;
+        }
+
+        public static bool ValidatePath(string path, PathType type = PathType.Irrelevant, ExistMode existMode = ExistMode.Irrelevant, bool validate = true, int maxLength = 220)
+        {
+            if (path.IsEmpty() || path.Trim().Length > maxLength)
+                return false;
+
+            if (validate && !PathIsValid(path))
+                return false;
+
+            bool? isDirectory = IsPathDirectory(path);
+
+            if (isDirectory == null)
+                return false;
+
+            if (type == PathType.File && isDirectory == true)
+                return false;
+
+            if (type == PathType.Dir && isDirectory == false)
+                return false;
+
+            return isDirectory == true ? ValidateDirPath(path, existMode) : ValidateFilePath(path, existMode);
+        }
+
+        public static bool PathIsValid(string path, bool allowRelativePaths = true)
+        {
+            bool isValid = true;
+
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+
+                if (allowRelativePaths)
+                {
+                    isValid = Path.IsPathRooted(path);
+                }
+                else
+                {
+                    string root = Path.GetPathRoot(path);
+                    isValid = $"{root}".Trim(['\\', '/']).IsNotEmpty();
+                }
+            }
+            catch
+            {
+                isValid = false;
+            }
+
+            return isValid;
         }
     }
 }
