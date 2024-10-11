@@ -1,5 +1,6 @@
-﻿// using MoreLinq;
-using NmkdUtils;
+﻿
+
+using NDesk.Options;
 
 namespace NmkdUtils.Extensions
 {
@@ -7,13 +8,24 @@ namespace NmkdUtils.Extensions
     {
         public class Options
         {
-            public NDesk.Options.OptionSet OptionsSet { get; set; }
+            public OptionSet? OptionsSet { get; set; } = null;
             public string BasicUsage { get; set; } = "";
             public string AdditionalHelpText { get; set; } = "";
             public bool AddHelpArg { get; set; } = true;
             public bool AlwaysPrintHelp { get; set; } = false;
             public bool PrintLooseArgs { get; set; } = true;
             public bool PrintHelpIfNoArgs { get; set; } = true;
+
+            public Options(string basicUsage = "", OptionSet options = null, string additionalHelp = "", bool addHelpArg = true, bool alwaysPrintHelp = false, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
+            {
+                BasicUsage = basicUsage;
+                OptionsSet = options;
+                AdditionalHelpText = additionalHelp;
+                AddHelpArg = addHelpArg;
+                AlwaysPrintHelp = alwaysPrintHelp;
+                PrintLooseArgs = printLooseArgs;
+                PrintHelpIfNoArgs = printHelpIfNoArgs;
+            }
         }
 
         public static void PrintHelp(this Options opts)
@@ -33,7 +45,7 @@ namespace NmkdUtils.Extensions
 
             foreach (var opt in opts.OptionsSet)
             {
-                string names = opt.GetNames().Select(s => s == opt.GetNames().First() ? $"-{s}" : $"--{s}").Join();
+                string names = opt.GetNames().Select(s => $"-{s}").Join();
                 lengths.Add(names.Length);
             }
 
@@ -42,22 +54,21 @@ namespace NmkdUtils.Extensions
 
             foreach (var opt in opts.OptionsSet)
             {
-                var names = opt.GetNames().Select(s => s == opt.GetNames().First() ? $"-{s}".Replace("-<>", looseStr) : $"--{s}").ToList();
+                var names = opt.GetNames().Select(s => $"-{s}".Replace("-<>", looseStr)).ToList();
                 if (names.Contains(looseStr) && !opts.PrintLooseArgs) continue;
-                string v = opt.OptionValueType == NDesk.Options.OptionValueType.None ? "" : " <VALUE>";
+                string v = opt.OptionValueType == NDesk.Options.OptionValueType.None ? "        " : " <VALUE>";
                 string desc = opt.Description.IsEmpty() ? "?" : opt.Description;
                 lines.Add(pad ? $"{names.Join().PadRight(maxLen)}{v} : {desc}" : $"{names.Join()}{v} : {desc}");
 
-                if(newLines)
+                if (newLines)
                 {
-                    lines.Add("");
-                    lines.Add("");
+                    lines.AddRange(["", ""]);
                 }
             }
 
             string s = $"Usage:{Environment.NewLine}{PathUtils.ExeName} {opts.BasicUsage}{Environment.NewLine}{lines.Join(Environment.NewLine)}{Environment.NewLine}";
 
-            if(linebreaks)
+            if (linebreaks)
             {
                 s = s.Replace(" : ", Environment.NewLine);
             }
