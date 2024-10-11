@@ -4,7 +4,7 @@ namespace NmkdUtils
 {
     public static class FormatExtensions
     {
-        public static string ElapsedStr(this System.Diagnostics.Stopwatch sw)
+        public static string GetElapsedStr(this System.Diagnostics.Stopwatch sw)
         {
             return FormatUtils.Time(sw.Elapsed);
         }
