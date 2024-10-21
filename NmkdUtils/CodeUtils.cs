@@ -1,5 +1,7 @@
 ﻿
 
+using System.Diagnostics;
+
 namespace NmkdUtils
 {
     public class CodeUtils
@@ -22,5 +24,21 @@ namespace NmkdUtils
             return Assert(() => failureCondition, failureAction);
         }
 
+        /// <summary>
+        /// Shortcut for a while loop that has a time limit, a sleep interval, and an optional break condition.
+        /// </summary>
+        public static void LimitedWhile(int timeoutMs, int intervalMs, Func<bool>? breakCondition = null, Action? action = null)
+        {
+            var sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (breakCondition?.Invoke() == true)
+                    break;
+
+                action?.Invoke();
+                Thread.Sleep(intervalMs);
+            }
+        }
     }
 }

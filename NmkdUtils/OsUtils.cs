@@ -269,7 +269,31 @@ namespace NmkdUtils
             catch (Exception ex)
             {
                 Log(ex, "Error retrieving executable processes");
-                return new List<Process>();
+                return [];
+            }
+        }
+
+        public static List<Process> GetProgramInstances(string exeName = "")
+        {
+            try
+            {
+                return Process.GetProcesses().AsParallel().Where(p =>
+                {
+                    try
+                    {
+                        string procExeName = Path.GetFileName(p.MainModule?.FileName);
+                        return procExeName != null && procExeName.Low().Contains(exeName.Low());
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                Log(ex, "Error retrieving executable processes");
+                return [];
             }
         }
 
