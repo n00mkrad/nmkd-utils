@@ -89,13 +89,48 @@ namespace NmkdUtils
             });
         }
 
-        public static string PascalToSnakeCase(string input)
+        /// <summary>
+        /// Converts a string (can be any object if it implements ToString) that is assumed to be PascalCase to snake_case
+        /// </summary>
+        public static string PascalToSnakeCase(object input)
         {
-            if (string.IsNullOrEmpty(input))
-                return input;
+            string s = $"{input}";
+
+            if (s.IsEmpty())
+                return "";
 
             var regex = new Regex("(?<=[a-z0-9])[A-Z]|(^[A-Z][a-z0-9]+)");
-            return regex.Replace(input, m => "_" + m.Value.ToLower()).TrimStart('_');
+            return regex.Replace(s, m => "_" + m.Value.ToLower()).TrimStart('_');
+        }
+
+        public static List<string> GetEnumNamesSnek(Type enumType)
+        {
+            return Enum.GetNames(enumType).Select(PascalToSnakeCase).ToList();
+        }
+
+        public static string PrintEnumsCli(Type enumType, bool withNumbers = true, bool linebreaks = false)
+        {
+            string delimiter = linebreaks ? "\n" : " ";
+            var list = GetEnumNamesSnek(enumType);
+            if(withNumbers)
+                list = list.Select((s, i) => $"{i}: {s}").ToList();
+            return list.Join(delimiter);
+        }
+
+        /// <summary>
+        /// Parses a string representing a bitrate (e.g. "24m"), case-insensitive, and returns it as kbps
+        /// </summary>
+        public static int ParseBitrateKbps(string s)
+        {
+            if (s.IsEmpty())
+                return 0;
+
+            s = s.Low().Trim();
+
+            if (s.Last() == 'm')
+                return (s.GetFloat() * 1000).RoundToInt();
+
+            return s.GetInt();
         }
     }
 }

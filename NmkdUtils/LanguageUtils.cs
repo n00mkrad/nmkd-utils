@@ -1,16 +1,25 @@
 ﻿
 
+using System.Diagnostics;
+
 namespace NmkdUtils
 {
     public class LanguageUtils
     {
+        [DebuggerDisplay("{Name}/{NativeName} - ISO 639-1 {Iso6391}, ISO 639-2 {Iso6392}, ISO 639-2 {Iso6392B}")]
         public class Language
         {
+            /// <summary> Language Family (e.g. "Indo-European") </summary>
             public string Family { get; set; }
+            /// <summary> Language Name in English (e.g. "Dutch") </summary>
             public string Name { get; set; }
+            /// <summary> Language Name in native Language (e.g. "Nederlands") </summary>
             public string NativeName { get; set; }
+            /// <summary> ISO 639-1 code (2 chars, e.g. "nl") </summary>
             public string Iso6391 { get; set; }
+            /// <summary> ISO 639-2 code (3 chars, based on native name, e.g. "nld") </summary>
             public string Iso6392 { get; set; }
+            /// <summary> ISO 639-2/B code, if available (3 chars, based on English name, e.g. "dut") </summary>
             public string Iso6392B { get; set; }
 
             // Constructor to initialize the Language object
@@ -25,6 +34,11 @@ namespace NmkdUtils
             }
         }
 
+        public static Language GetUndefined ()
+        {
+            return new Language("Undefined", "Undefined", "Undefined", "un", "und", "und"); // Note: ISO-639-1 "un" code is non-standard, but ISO-639-2 "und" is.
+        }
+
         public static Language GetLangByNameOrCode(string nameOrCode)
         {
             return GetLangByName(nameOrCode) ?? GetLangByCode(nameOrCode);
@@ -37,6 +51,7 @@ namespace NmkdUtils
 
         public static Language GetLangByCode(string code)
         {
+            code = code.Low();
             return GetLangByCodes(code, code, code);
         }
 
@@ -51,6 +66,30 @@ namespace NmkdUtils
                 lang = Languages.Where(l => l.Iso6392B.IsNotEmpty() && l.Iso6392B == iso6392B).FirstOrDefault();
 
             return lang;
+        }
+
+        public static void PrettyPrintLangs(string filter = "", bool includeFamily = false)
+        {
+            string msg = $"{"Name",-55}  {"Native Name",-40}  {"ISO 639-1",-10}  {"ISO 639-2",-10}  {"ISO 639-2/B",-10}";
+
+            if (includeFamily)
+            {
+                msg += "  Family";
+            }
+
+            foreach (var lang in Languages)
+            {
+                string l = $"\n{lang.Name,-55}  {lang.NativeName,-40}  {lang.Iso6391,-10}  {lang.Iso6392,-10}  {lang.Iso6392B,-10}{(includeFamily ? $"  {lang.Family}" : "")}";
+
+                if (filter.IsNotEmpty() && !l.Contains(filter))
+                {
+                    continue;
+                }
+
+                msg += l;
+            }
+
+            Logger.Log($"Languages\n{msg}");
         }
 
         public static readonly List<Language> Languages = new()
@@ -93,7 +132,7 @@ namespace NmkdUtils
             new ("Indo-European", "Czech", "čeština, český jazyk", "cs", "ces", "cze" ),
             new ("Indo-European", "Danish", "dansk", "da", "dan"),
             new ("Indo-European", "Divehi, Dhivehi, Maldivian", "ދިވެހި", "dv", "div"),
-            new ("Indo-European", "Dutch", "Nederlands, Vlaams", "nl", "nld", "dut" ),
+            new ("Indo-European", "Dutch", "Nederlands", "nl", "nld", "dut" ),
             new ("Sino-Tibetan", "Dzongkha", "རྫོང་ཁ", "dz", "dzo" ),
             new ("Indo-European", "English", "English", "en", "eng" ),
             new ("Constructed", "Esperanto", "Esperanto", "eo", "epo" ),
@@ -120,7 +159,7 @@ namespace NmkdUtils
             new ("Uralic", "Hungarian", "magyar", "hu", "hun" ),
             new ("Constructed", "Interlingua", "Interlingua", "ia", "ina" ),
             new ("Austronesian", "Indonesian", "Bahasa Indonesia", "id", "ind"),
-            new ("Constructed", "Interlingue", "Originally called Occidental; then Interlingue after WWII", "ie", "ile" ),
+            new ("Constructed", "Interlingue", "Formerly Occidental", "ie", "ile" ),
             new ("Indo-European", "Irish", "Gaeilge", "ga", "gle" ),
             new ("Niger–Congo", "Igbo", "Asụsụ Igbo", "ig", "ibo" ),
             new ("Eskimo–Aleut", "Inupiaq", "Iñupiaq, Iñupiatun", "ik", "ipk" ),

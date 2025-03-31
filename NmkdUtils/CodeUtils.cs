@@ -24,6 +24,19 @@ namespace NmkdUtils
             return Assert(() => failureCondition, failureAction);
         }
 
+        // Function to set a variable via ref only if a given condition is met
+        public static void SetIf<T>(ref T variable, T value, Func<bool> condition)
+        {
+            if (condition())
+                variable = value;
+        }
+
+        public static void SetIfNotNull<T>(ref T variable, object? value)
+        {
+            if (value != null)
+                variable = (T)value;
+        }
+
         /// <summary>
         /// Shortcut for a while loop that has a time limit, a sleep interval, and an optional break condition.
         /// </summary>

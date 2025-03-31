@@ -1,38 +1,29 @@
 ﻿using System.Collections;
-using System.Diagnostics;
-using System.Text;
 
 namespace NmkdUtils
 {
     public static class ObjectExtensions
     {
-        /// <summary> Turns an object into an array of the same type with the object as its sole entry </summary>
-        public static T[] AsArray<T>(this T obj)
-        {
-            return new[] { obj };
-        }
-
-        /// <summary> Turns an object into a list of the same type with the object as its sole entry </summary>
-        public static List<T> AsList<T>(this T obj)
-        {
-            return new List<T> { obj };
-        }
-
         /// <summary> Get a value from a dictionary, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
         public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue fallback = default)
         {
             // For string values, use empty string instead of null as default value
             if (typeof(TValue) == typeof(string) && fallback is null)
             {
-                fallback = (TValue)(object)string.Empty;
+                fallback = (TValue)(object)"";
             }
 
             if (dictionary == null)
-            {
                 return fallback;
-            }
 
             return dictionary.TryGetValue(key, out var value) ? value : fallback;
+        }
+
+        // Same as above, but with out parameter
+        public static bool Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue value, TValue fallback = default)
+        {
+            value = dictionary.Get(key, fallback);
+            return !value.Equals(fallback);
         }
 
         /// <summary> Adds a <paramref name="value"/> to a dictionary of lists; creates a new list if there is none yet. </summary>
@@ -47,7 +38,7 @@ namespace NmkdUtils
             else
             {
                 // Create a new list, add the value and add this list to the dictionary
-                dict[key] = new List<TValue> { value };
+                dict[key] = [value];
             }
         }
 
@@ -61,6 +52,24 @@ namespace NmkdUtils
         public static bool None<T>(this IEnumerable<T> source, Func<T, bool> predicate)
         {
             return !source.Any(predicate);
+        }
+
+        /// <summary> Checks if a collection is not null and has at least 1 item </summary>
+        public static bool HasItems<T>(this IEnumerable<T> source)
+        {
+            return source?.Any() ?? false;
+        }
+
+        /// <summary>
+        /// Splits a string by <paramref name="separator"/> and returns only non-empty results. If <paramref name="input"/> is null, an empty array is returned by default (<paramref name="returnEmptyArrayInsteadOfNull"/>).<br/>
+        /// Mainly for CLI parsing of comma-separated values.
+        /// </summary>
+        public static IEnumerable<string> SplitValues(this string input, char separator = ',', bool returnEmptyArrayInsteadOfNull = true)
+        {
+            if (input is null)
+                return returnEmptyArrayInsteadOfNull ? new string[0] : null;
+
+            return input.Split(separator).Where(s => s.IsNotEmpty());
         }
 
         public static string ToStringFlexible(this object o, string nullPlaceholder = "N/A", string joinSeparator = ", ", int maxListItems = 10)

@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualBasic.FileIO;
+using System.Drawing;
 using SearchOption = System.IO.SearchOption;
 
 namespace NmkdUtils
@@ -483,6 +484,81 @@ namespace NmkdUtils
             }
 
             return isValid;
+        }
+
+        /// <summary>
+        /// Writes a dictionary to a file in the format "key=value"
+        /// </summary>
+        public static void WriteDictToFile<TKey, TValue>(Dictionary<TKey, TValue> dict, string path)
+        {
+            var lines = dict.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
+            File.WriteAllLines(path, lines);
+        }
+
+        /// <summary>
+        /// Reads a dictionary from a file in the format "key=value". Returns empty dictionary if the file does not exist.
+        /// </summary>
+        public static Dictionary<string, string> ReadDictFromFile(string path)
+        {
+            var dict = new Dictionary<string, string>();
+
+            if (!File.Exists(path))
+                return dict;
+
+            try
+            {
+                var lines = File.ReadAllLines(path);
+
+                foreach (string line in lines)
+                {
+                    if (line.Trim().StartsWith("#") || line.IsEmpty())
+                        continue;
+
+                    var split = line.Split('=');
+                    if (split.Length == 2)
+                    {
+                        dict[split[0]] = split[1];
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogErr($"Failed to read dictionary from file '{path}': {ex.Message}");
+            }
+
+            return dict;
+        }
+
+        /// <summary>
+        /// Returns a path with a number appended to it if the original path already exists. The format can be customized with <paramref name="pattern"/>, the counter starts at <paramref name="startingNum"/>.<br/>
+        /// If <paramref name="alwaysUseSuffix"/> is true, the pattern will always be appended to the path even if it would've been valid.
+        /// </summary>
+        public static string GetAvailablePath(string path, string pattern = "_{0}", int startingNum = 1, int maxAttempts = 10000, bool alwaysUseSuffix = false)
+        {
+            if (path.IsEmpty() || (!alwaysUseSuffix && !File.Exists(path)))
+                return path;
+
+            string dir = Path.GetDirectoryName(path);
+            string name = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+
+            for (int i = startingNum; i < maxAttempts; i++)
+            {
+                string newPath = Path.Combine(dir, $"{name}{string.Format(pattern, i)}{ext}");
+
+                if (!File.Exists(newPath))
+                    return newPath;
+            }
+
+            Logger.LogWrn($"Failed to find an available path for '{path}' after {maxAttempts} attempts! Returning original path!");
+            return path;
+        }
+
+        /// <summary> Loads an image from a file without locking it. </summary>
+        public static Image LoadImage(string path)
+        {
+            using var img = Image.FromFile(path);
+            return new Bitmap(img); // clones it in memory.
         }
     }
 }

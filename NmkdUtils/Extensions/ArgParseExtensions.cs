@@ -1,6 +1,4 @@
-﻿
-
-using NDesk.Options;
+﻿using NDesk.Options;
 
 namespace NmkdUtils.Extensions
 {
@@ -16,7 +14,7 @@ namespace NmkdUtils.Extensions
             public bool PrintLooseArgs { get; set; } = true;
             public bool PrintHelpIfNoArgs { get; set; } = true;
 
-            public Options(string basicUsage = "", OptionSet options = null, string additionalHelp = "", bool addHelpArg = true, bool alwaysPrintHelp = false, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
+            public Options(string basicUsage = "", OptionSet? options = null, string additionalHelp = "", bool addHelpArg = true, bool alwaysPrintHelp = false, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
             {
                 BasicUsage = basicUsage;
                 OptionsSet = options;
@@ -26,6 +24,61 @@ namespace NmkdUtils.Extensions
                 PrintLooseArgs = printLooseArgs;
                 PrintHelpIfNoArgs = printHelpIfNoArgs;
             }
+        }
+
+        public class PathConfig
+        {
+            public enum SortMode { None, Name, Date, Size }
+
+            public List<string> Paths = new();
+            public bool AllowRecurse { get; set; } = false;
+            public bool AllowEmptyFiles { get; set; } = false;
+            public string FilesWildcard { get; set; } = "*";
+            public SortMode Sort { get; set; } = SortMode.Name;
+
+            public List<string> GetValidFiles ()
+            {
+                Paths = Paths.Select(p => p.TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
+                var validDirs = Paths.Where(dirPath => IoUtils.ValidatePath(dirPath, IoUtils.PathType.Dir)).Select(Path.GetFullPath).ToList(); // Collect valid directories from input paths
+                validDirs.ForEach(d => Paths.AddRange(Directory.GetFiles(d, FilesWildcard, AllowRecurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))); // Add files from directories to the list of paths
+                var existMode = AllowEmptyFiles ? IoUtils.ExistMode.MustExist : IoUtils.ExistMode.NotEmpty;
+                var validFiles = Paths.Where(p => IoUtils.ValidatePath(p, IoUtils.PathType.File, existMode)).Select(Path.GetFullPath).Distinct(); // Filter out invalid files, get full paths, remove duplicates
+
+                if (FilesWildcard != "*" && FilesWildcard.IsNotEmpty())
+                {
+                    validFiles = validFiles.Where(f => new FileInfo(f).Name.MatchesWildcard(FilesWildcard)); // Apply wildcard filename filter
+                }
+
+                if (Sort == SortMode.Name) validFiles = validFiles.OrderBy(f => Path.GetFileName(f)); // Sort files by name
+                else if (Sort == SortMode.Date) validFiles = validFiles.OrderBy(f => File.GetLastWriteTime(f)); // Sort files by date
+                else if (Sort == SortMode.Size) validFiles = validFiles.OrderBy(f => new FileInfo(f).Length); // Sort files by size
+
+                return validFiles.ToList();
+            }
+        }
+
+        public static PathConfig AddPathConfig (this Options opts, PathConfig.SortMode? sort = null, bool? allowEmptyFiles = null)
+        {
+            var pathCfg = new PathConfig();
+            opts.OptionsSet.Add("p_r|recurse", $"Allow recursive search for files. Only relevant when passing directory paths.", v => pathCfg.AllowRecurse = v != null);
+            opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern. Only relevant when passing directory paths.", v => pathCfg.FilesWildcard = v.Trim());
+            opts.OptionsSet.Add("<>", "File/directory path(s)", pathCfg.Paths.Add);
+            if(sort.HasValue) pathCfg.Sort = sort.Value;
+            if (allowEmptyFiles.HasValue) pathCfg.AllowEmptyFiles = allowEmptyFiles.Value;
+            return pathCfg;
+        }
+
+        public static void PromptForPathConfigOptions (ref PathConfig pathCfg)
+        {
+            if (pathCfg.Paths.All(File.Exists)) // All paths are files, so directory search options are not relevant
+                return;
+
+            bool recurse = pathCfg.AllowRecurse;
+            var filesWildcard = pathCfg.FilesWildcard;
+            CliUtils.ReadLineBool("Allow recursive search for files (Y/N):", (b) => recurse = b);
+            CliUtils.ReadLine("Filter files using a wildcard pattern (Default = All):", (s) => filesWildcard = s.Trim());
+            pathCfg.AllowRecurse = recurse;
+            pathCfg.FilesWildcard = filesWildcard;
         }
 
         public static void PrintHelp(this Options opts)

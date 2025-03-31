@@ -1,6 +1,7 @@
 ﻿
 
 using System.Globalization;
+using NmkdUtils.Media;
 
 namespace NmkdUtils
 {
@@ -36,7 +37,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Gets the decoded bitrate of a <paramref name="file"/> (or specific stream if <paramref name="streamIndex"/> is used) by demuxing it to NUL </summary>
-        public static int GetKbps(MediaData.MediaObject media, int streamIndex = -1)
+        public static int GetKbps(MediaObject media, int streamIndex = -1)
         {
             return GetKbps(media.File.FullName, streamIndex);
         }

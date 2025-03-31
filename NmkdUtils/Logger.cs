@@ -1,4 +1,6 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using static NmkdUtils.CodeUtils;
 
 namespace NmkdUtils
 {
@@ -6,14 +8,26 @@ namespace NmkdUtils
     {
         public class Entry
         {
-            public string Message { get; set; } = "";
-            public Logger.Level LogLevel { get; set; } = Level.Info;
-            public int ShowTwiceTimeout { get; set; } = 0;
-            public string? ReplaceWildcard { get; set; } = null;
+            public string Message = "";
+            public Level LogLevel = Level.Info;
+            public bool Print = true;
+            public bool WriteToFile = true;
+            public ConsoleColor? CustomColor = null;
+            public int ShowTwiceTimeout = 0;
+            public string? ReplaceWildcard = null;
+
+            public Entry() { }
+            public Entry(object message, Level? logLevel = null, bool? printToConsole = null, bool? writeToFile = null)
+            {
+                Message = $"{message}";
+                LogLevel = logLevel ?? LogLevel;
+                Print = printToConsole ?? Print;
+                WriteToFile = writeToFile ?? WriteToFile;
+            }
         }
 
-
         public static string LogsDir { get; private set; }
+        private static readonly bool _debugger;
         public enum Level { Debug, Verbose, Info, Warning, Error, None }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
@@ -24,8 +38,9 @@ namespace NmkdUtils
         private static BlockingCollection<Entry> _logQueue = new();
         private static Thread _loggingThread;
 
-        public static string LastLogMsg = string.Empty;
-        public static string LastLogMsgCon = string.Empty;
+        public static string LastLogMsg = "";
+        public static string LastLogMsgCon = "";
+        public static string LastLogMsgFile = "";
         private static DateTime _lastLogTime = DateTime.MinValue;
         private static readonly object _logLock = new();
 
@@ -57,6 +72,7 @@ namespace NmkdUtils
         static Logger()
         {
             LogsDir = PathUtils.GetCommonSubdir(PathUtils.CommonDir.Logs);
+            _debugger = Debugger.IsAttached;
             _loggingThread = new Thread(new ThreadStart(ProcessLogQueue)) { IsBackground = true };
             _loggingThread.Start();
         }
@@ -97,17 +113,31 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null)
+        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
         {
-            if (o is Exception)
+            // Check if this is a Logger.Entry object since it should be enqueued, not turned into a string
+            if (o is Entry entry)
             {
-                Log((Exception)o, "");
+                _logQueue.Add(entry);
                 return;
             }
 
-            if (level != Level.None && (int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel)
+            // Return if condition is given and not met
+            if (condition != null && !condition())
+                return;
+
+            // Redirect to Exception log function if this is an exception object
+            if (o is Exception exception)
+            {
+                Log(exception, "");
+                return;
+            }
+
+            if ((level != Level.None && (int)level >= (int)ConsoleLogLevel) || ((int)level >= (int)FileLogLevel))
             {
                 var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout, ReplaceWildcard = replaceWildcard };
+                SetIfNotNull(ref logEntry.Print, print);
+                SetIfNotNull(ref logEntry.WriteToFile, toFile);
                 _logQueue.Add(logEntry);
             }
         }
@@ -119,31 +149,28 @@ namespace NmkdUtils
             Log($"{(location.IsEmpty() ? "" : $"[{location}] ")}[{e.GetType()}] {(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{(printTrace ? Environment.NewLine + FormatUtils.NicerStackTrace(trace) : "")}", Level.Error);
         }
 
-        public static void LogWrn(object o)
+        public static void LogWrn(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
         {
-            Log(o, Level.Warning);
+            Log(o, Level.Warning, condition: condition, print: print, toFile: toFile);
         }
 
-        public static void LogErr(object o)
+        public static void LogErr(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
         {
-            Log(o, Level.Error);
+            Log(o, Level.Error, condition: condition, print: print, toFile: toFile);
         }
 
         public static void WriteLog(Entry entry)
         {
             string msg = entry.Message;
             Level level = entry.LogLevel;
-
-            if(DisabledLevels.Contains(level))
-            {
-                return;
-            }
-
             bool shouldLog;
 
             lock (_logLock)
             {
-                shouldLog = !(msg == LastLogMsg && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout);
+                bool printOrWrite = entry.Print || entry.WriteToFile; // Don't log if we're not printing or logging to file
+                bool levelDisabled = DisabledLevels.Contains(level); // Don't log if this log level is disabled
+                bool duplicateTooFast = entry.ShowTwiceTimeout > 0 && msg == LastLogMsg && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout; // Don't log if the msg is identical to the previous & ShowTwiceTimeout hasn't passed
+                shouldLog = printOrWrite && !levelDisabled && !duplicateTooFast;
 
                 if (shouldLog)
                 {
@@ -155,10 +182,7 @@ namespace NmkdUtils
             if (!shouldLog)
                 return;
 
-            LastLogMsg = msg;
-            _lastLogTime = DateTime.Now;
-
-            if ((int)level >= (int)ConsoleLogLevel)
+            if (entry.Print && (int)level >= (int)ConsoleLogLevel) // Check if this message should be printed to console and if the loglevel is high enough
             {
                 string msgNoPrefix = msg;
                 var lines = msg.SplitIntoLines();
@@ -167,14 +191,14 @@ namespace NmkdUtils
                 for (int i = 0; i < lines.Length; i++)
                 {
                     string prefix = i == 0 ? firstLinePrefix : "".PadRight(firstLinePrefix.Length);
-                    lines[i] = $"{prefix} {lines[i].Trim()}";
+                    lines[i] = $"{prefix} {lines[i]}";
                 }
 
                 string output = string.Join(Environment.NewLine, lines);
                 string text = PrintLogLevel ? output : msgNoPrefix;
-                Console.ForegroundColor = _logLevelColors[level];
-                
-                if(entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard))
+                Console.ForegroundColor = entry.CustomColor == null ? _logLevelColors[level] : entry.CustomColor.Value; // Set custom color if given, otherwise use color based on log level
+
+                if (entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard) && entry.Message.MatchesWildcard(entry.ReplaceWildcard))
                 {
                     CliUtils.ReplaceLastConsoleLine(text);
                 }
@@ -183,20 +207,20 @@ namespace NmkdUtils
                     Console.WriteLine(text);
                 }
 
+                if (_debugger)
+                    Debug.WriteLine(text);
+
                 Console.ResetColor();
                 LastLogMsgCon = msg;
                 OnConsoleWritten?.Invoke(msg);
                 OnConsoleWrittenWithLvl?.Invoke(output);
             }
 
-            if ((int)level >= (int)FileLogLevel)
+            if (entry.WriteToFile && (int)level >= (int)FileLogLevel) // Check if this message should be written to file and if the loglevel is high enough
             {
                 var now = DateTime.Now;
-                string time = now.ToString("yyyy-MM-dd HH:mm:ss");
-                string day = now.ToString("yyyy-MM-dd");
-
                 var lines = msg.SplitIntoLines();
-                string firstLinePrefix = $"[{time}] [{_logLevelNames[level]}]";
+                string firstLinePrefix = $"[{now.ToString("yyyy-MM-dd HH:mm:ss")}] [{_logLevelNames[level]}]";
 
                 for (int i = 0; i < lines.Length; i++)
                 {
@@ -204,37 +228,47 @@ namespace NmkdUtils
                     lines[i] = $"{prefix} {lines[i].Trim()}";
                 }
 
-                TryWriteToFile(Path.Combine(LogsDir, $"{day}.txt"), string.Join(Environment.NewLine, lines));
+                TryWriteToFile(Path.Combine(LogsDir, $"{now.ToString("yyyy-MM-dd")}{(_debugger ? "_debug" : "")}.txt"), lines.Join(Environment.NewLine));
             }
         }
 
-        private static void TryWriteToFile(string path, string text, int delayMs = 20, int retries = 10)
+        private static void TryWriteToFile(string path, string text, int delayMs = 25, int retries = 10)
         {
-            try
+            for (int i = 0; i < retries; i++)
             {
-                File.AppendAllLines(path, text.AsList());
-            }
-            catch
-            {
-                if (retries < 1)
+                try
                 {
-                    Console.WriteLine($"Failed to write to log file and out of retries! ({path})");
+                    File.AppendAllLines(path, [text]);
                     return;
                 }
-
-                Thread.Sleep(delayMs);
-                TryWriteToFile(path, text, delayMs, retries - 1);
+                catch
+                {
+                    Thread.Sleep(retries > 5 ? delayMs : delayMs * 2); // Wait longer if we're retrying a lot
+                }
             }
+            Console.WriteLine($"Failed to write to log file after {retries} retries! ({path})");
         }
 
         public static void WaitForEmptyQueue()
         {
-            Thread.Sleep(1);
+            Thread.Sleep(90);
 
             while (_logQueue.Count > 0)
             {
                 Thread.Sleep(10);
             }
+
+            Thread.Sleep(10);
+        }
+
+        public static void DumpConsoleColors()
+        {
+            Log("Console Colors:");
+            foreach (ConsoleColor color in Enum.GetValues(typeof(ConsoleColor)))
+            {
+                Log(new Entry($"This is ConsoleColor.{color}!") { CustomColor = color });
+            }
+            Console.ResetColor();
         }
     }
 

@@ -5,30 +5,51 @@ namespace NmkdUtils
     public static class ParsingExtensions
     {
         /// <summary>
-        /// Gets the enum value from a string. If not found, returns <paramref name="fallback"/> if provided. <paramref name="flexible"/> removes all hyphens and underscores before parsing
+        /// Gets the enum value from a string. If not found, returns <paramref name="fallback"/> if provided. <paramref name="flexible"/> removes all hyphens and underscores before parsing (e.g. for passing snake_case).
         /// </summary>
-        public static T GetEnum<T>(this string value, bool ignoreCase = true, bool flexible = false, T? fallback = null) where T : struct
+        public static T GetEnum<T>(this string value, bool ignoreCase = true, bool flexible = false, T? fallback = null, bool log = false) where T : struct
         {
             if (flexible)
             {
                 value = value.Replace("-", "").Replace("_", "");
             }
 
-            if (Enum.TryParse<T>(value, ignoreCase, out T result))
-            {
+            if (Enum.TryParse(value, ignoreCase, out T result))
                 return result;
-            }
 
-            Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}");
+            if (log)
+            {
+                Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}");
+            }
 
             if (fallback.HasValue)
-            {
                 return fallback.Value;
-            }
-            else
+
+            return (T)Enum.GetValues(typeof(T)).GetValue(0);
+        }
+
+        public static T GetEnumCli<T>(this object value, T? fallback = null, bool log = false) where T : struct
+        {
+            if (value is int i)
+                return GetEnum(i, fallback, log);
+
+            return GetEnum($"{value}", ignoreCase: true, flexible: true, fallback, log);
+        }
+
+        public static T GetEnum<T>(this int value, T? fallback = null, bool log = false) where T : struct
+        {
+            if (Enum.IsDefined(typeof(T), value))
+                return (T)Enum.ToObject(typeof(T), value);
+
+            if (log)
             {
-                return (T)Enum.GetValues(typeof(T)).GetValue(0);
+                Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}");
             }
+
+            if (fallback.HasValue)
+                return fallback.Value;
+
+            return (T)Enum.GetValues(typeof(T)).GetValue(0);
         }
 
         public static List<string> GetValues<T>() where T : Enum

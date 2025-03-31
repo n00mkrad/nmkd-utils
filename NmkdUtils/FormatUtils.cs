@@ -66,6 +66,17 @@ namespace NmkdUtils
 
         public class Media
         {
+            public static string Bitrate(int bps, bool space = true)
+            {
+                string s = space ? " " : "";
+                float kbps = bps / 1000;
+
+                if (bps < 10000)
+                    return $"{kbps:0.0#}{s}kbps";
+
+                return kbps < 10000 ? $"{kbps:0}{s}kbps" : $"{kbps / 1000:0.0}{s}Mbps";
+            }
+
             public static int BitDepthFromPixFmt(string pixFmt)
             {
                 pixFmt = pixFmt.Low();
@@ -78,8 +89,8 @@ namespace NmkdUtils
 
             public enum LayoutStringFormat { Raw, Prettier, Numbers }
             public static string AudioLayout(string ffmpegLayoutName, LayoutStringFormat format = LayoutStringFormat.Raw)
-            {;
-                if(format == LayoutStringFormat.Prettier)
+            {
+                if (format == LayoutStringFormat.Prettier)
                 {
                     string s = ffmpegLayoutName.Replace("(", " (");
                     s = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(s);
@@ -91,6 +102,62 @@ namespace NmkdUtils
 
                 return ffmpegLayoutName.Trim();
             }
+        }
+
+        public static string BeautifyFfmpegStats(string s)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            string orig = s;
+            s = s.SquashSpaces().Replace("= ", "=").Replace("Lsize", "size"); // Squash multiple spaces, remove spaces after equals signs for easier parsing, Lsize => size (what's the difference?)
+            string frame = s.Contains("frame=") ? s.Split("frame=").Last().Split(' ').First().Replace("N/A", "") : "";
+            string fps = s.Contains(" fps=") ? s.Split(" fps=").Last().Split(' ').First().Replace("N/A", "").Replace("0.0", "") : "";
+            string size = s.Contains("size=") ? s.Split("size=").Last().Split(' ').First().Split('K').First().Replace("N/A", "") : "";
+            string time = s.Contains(" time=") ? s.Split(" time=").Last().Split(' ').First().Replace("N/A", "") : "";
+            string br = s.Contains(" bitrate=") ? s.Split(" bitrate=").Last().Split(' ').First().Split('k').First().Replace("N/A", "") : "";
+            string speed = s.Contains(" speed=") ? s.Split(" speed=").Last().Split(' ').First().Split('x').First().Replace("N/A", "") : "";
+
+            if (speed.IsEmpty() && (frame.IsEmpty() || size.IsEmpty()))
+                return orig;
+
+            List<string> values = [];
+
+            if (frame.IsNotEmpty())
+                values.Add($"Frame: {frame}");
+
+            if (fps.IsNotEmpty())
+                values.Add($"FPS: {fps}");
+
+
+            if (br.IsNotEmpty())
+            {
+                float bitrate = br.GetFloat();
+                string brStr = bitrate < 2048 ? $"{bitrate:0} kbps" : $"{bitrate / 1024:0.0} Mbps";
+                values.Add($"Bitrate: {brStr}");
+            }
+
+            if (size.IsNotEmpty())
+                values.Add($"Output Size: {(size.GetFloat() / 1024f).ToString("0.##")} MiB");
+
+            if (time.IsNotEmpty() && !time.StartsWith("-"))
+                values.Add($"Time: {time}");
+
+            if (speed.IsNotEmpty())
+            {
+                if (speed.Contains("e+"))
+                {
+                    values.Add($"Speed: >999x");
+                }
+                else
+                {
+                    float speedVal = speed.GetFloat();
+                    string speedStr = speedVal < 1f ? $"{speedVal:0.##}x" : $"{speedVal:0.0}x";
+                    values.Add($"Speed: {speedStr}");
+                }
+            }
+
+            return values.Join(" - ").Trim();
         }
 
         public static string ProgramInfo(string buildTimestamp)
@@ -112,7 +179,8 @@ namespace NmkdUtils
             {
                 split[i] = Regex.Replace(split[i], @"`\d", "");
 
-                if (split[i].StartsWith("   at ") && split[i].MatchesWildcard("* in *.cs:line*")){
+                if (split[i].StartsWith("   at ") && split[i].MatchesWildcard("* in *.cs:line*"))
+                {
                     split[i] = Regex.Replace(split[i], @" in .+\\([^\\]+):line", " in $1 - Line");
                 }
 

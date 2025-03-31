@@ -49,9 +49,10 @@ namespace NmkdUtils
             return GetAppSubdir(subdir.ToString());
         }
 
-        public static string GetAppSubdir(string subdir)
+        public static string GetAppSubdir(string subdir, bool create = true)
         {
-            return Directory.CreateDirectory(Path.Combine(ExeDir, subdir)).FullName;
+            string dir = Path.Combine(ExeDir, subdir);
+            return create ? Directory.CreateDirectory(Path.Combine(ExeDir, subdir)).FullName : dir;
         }
     }
 }

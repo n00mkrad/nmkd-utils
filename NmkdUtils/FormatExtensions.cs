@@ -13,5 +13,11 @@ namespace NmkdUtils
         {
             return FormatUtils.Time(ts);
         }
+
+        /// <summary> Converts a DateTime to a Unix timestamp in whole milliseconds </summary>
+        public static long ToUnixMs(this DateTime dt)
+        {
+            return new DateTimeOffset(dt.ToUniversalTime()).ToUnixTimeMilliseconds();
+        }
     }
 }

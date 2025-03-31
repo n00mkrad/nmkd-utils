@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+﻿using System.Management;
 using System.Text.RegularExpressions;
 
 namespace NmkdUtils
@@ -10,30 +10,24 @@ namespace NmkdUtils
             public long TotalBytes { get; set; } = 0;
             public long UsedBytes { get; set; } = 0;
             public long AvailBytes { get; set; } = 0;
-            public float TotalGb => (float)TotalBytes / 1024 / 1024 / 1024;
-            public float UsedGb => (float)UsedBytes / 1024 / 1024 / 1024;
-            public float AvailGb => (float)AvailBytes / 1024 / 1024 / 1024;
-        }
+            public float TotalGb => TotalBytes / 1024f / 1024f / 1024f;
+            public float UsedGb => UsedBytes / 1024f / 1024f / 1024f;
+            public float AvailGb => AvailBytes / 1024f / 1024f / 1024f;
 
-        private static PerformanceCounter? PerfCounterRam = null;
+            public override string ToString() => $"{FormatUtils.FileSize(UsedBytes)} / {FormatUtils.FileSize(TotalBytes)} ({FormatUtils.FileSize(AvailBytes)} Free)";
+        }
 
         public static RamInfo GetRamInfo()
         {
             if (OsUtils.IsWindows)
             {
-                string availOutput = OsUtils.RunCommand("wmic OS get FreePhysicalMemory");
-                var availBytes = availOutput.SplitIntoLines().Where(l => l.IsNotEmpty()).Last().GetLong() * 1024;
-
-                if (availBytes <= 0 && false)
+                using var searcher = new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
+                foreach (var obj in searcher.Get())
                 {
-                    Logger.LogWrn("Getting RAM using PerformanceCounter instead of wmic command, this is a lot slower on the first run!");
-                    PerfCounterRam ??= new PerformanceCounter("Memory", "Available Bytes");
-                    availBytes = (long)PerfCounterRam.NextValue();
+                    var totalVisibleMemory = long.Parse(obj["TotalVisibleMemorySize"].ToString()) * 1024; // Convert from KB to B
+                    var freePhysicalMemory = long.Parse(obj["FreePhysicalMemory"].ToString()) * 1024; // Convert from KB to B
+                    return new RamInfo() { TotalBytes = totalVisibleMemory, UsedBytes = totalVisibleMemory - freePhysicalMemory, AvailBytes = freePhysicalMemory }; ;
                 }
-
-                var totalPhysicalMemory = (long)(GetPhysicallyInstalledSystemMemory(out ulong totalMemKb) ? totalMemKb : 0) * 1024;
-                var usedMemory = totalPhysicalMemory - availBytes;
-                return new RamInfo() { TotalBytes = totalPhysicalMemory, UsedBytes = usedMemory, AvailBytes = availBytes };
             }
 
             if (OsUtils.IsLinux)

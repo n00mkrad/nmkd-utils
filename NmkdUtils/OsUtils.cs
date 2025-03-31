@@ -43,6 +43,7 @@ namespace NmkdUtils
         public class RunConfig
         {
             public string Command { get; set; } = "";
+            public bool DontWait { get; set; } = false;
             public bool PrintExitCode { get; set; } = false;
             public int PrintOutputLines { get; set; } = 0;
             public ProcessPriorityClass? Priority { get; set; } = null;
@@ -69,6 +70,7 @@ namespace NmkdUtils
             public string StdErr { get; set; } = "";
             public int ExitCode { get; set; } = 0;
             public TimeSpan RunTime { get; set; } = TimeSpan.FromSeconds(0);
+            public string RunTimeStr => FormatUtils.Time(RunTime);
         }
 
         public static string RunCommand(string command, int printOutputLines = 0, bool printExitCode = false)
@@ -93,12 +95,13 @@ namespace NmkdUtils
             {
                 string tempScript = "";
 
-#if Linux
-                tempScript = Path.Combine(Path.GetTempPath(), Path.GetTempFileName()) + ".sh";
-                File.WriteAllText(tempScript, cfg.Command);
-                File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                cfg.Command = tempScript;
-#endif
+                if (IsLinux)
+                {
+                    tempScript = Path.Combine(Path.GetTempPath(), $"{Path.GetTempFileName()}.sh");
+                    File.WriteAllText(tempScript, cfg.Command);
+                    File.SetUnixFileMode(tempScript, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    cfg.Command = tempScript;
+                }
 
                 var startInfo = new ProcessStartInfo
                 {
@@ -159,25 +162,28 @@ namespace NmkdUtils
                 process.BeginErrorReadLine();
                 SetOwnProcessPriority(previousParentPrio); // ...and afterwards changing the parent's priority back to what it was
 
-                if (cfg.Killswitch == null)
+                if (!cfg.DontWait)
                 {
-                    process.WaitForExit();
-                }
-                else
-                {
-                    while (cfg.Killswitch() == false)
+                    if (cfg.Killswitch == null)
                     {
-                        Thread.Sleep(cfg.KillswitchCheckIntervalMs);
-
-                        if (process.HasExited)
-                            break;
+                        process.WaitForExit();
                     }
-
-                    // Killswitch true
-                    if (!process.HasExited)
+                    else
                     {
-                        Log("Killswitch true, killing process.", Level.Verbose);
-                        process.Kill(true);
+                        while (cfg.Killswitch() == false)
+                        {
+                            Thread.Sleep(cfg.KillswitchCheckIntervalMs);
+
+                            if (process.HasExited)
+                                break;
+                        }
+
+                        // Killswitch true
+                        if (!process.HasExited)
+                        {
+                            Log("Killswitch true, killing process.", Level.Verbose);
+                            process.Kill(true);
+                        }
                     }
                 }
 
@@ -239,32 +245,34 @@ namespace NmkdUtils
             return p;
         }
 
-        /// <summary> Get all instances (including self, unless <paramref name="excludeSelf"/> is true) of this executable. Should take no more than ~50ms on a modern machine </summary>
+        /// <summary>
+        /// Get all instances (including self, unless <paramref name="excludeSelf"/> is true) of <paramref name="exePath"/> (defaults to own process if empty).<br/>
+        /// Should take no more than ~50ms on a modern machine.
+        /// </summary>
         public static List<Process> GetExecutableInstances(string exePath = "", bool excludeSelf = false)
         {
             try
             {
-                string? currentExecutablePath = exePath.IsNotEmpty() ? exePath : Environment.ProcessPath;
-
-                if (currentExecutablePath.IsEmpty())
-                {
-                    throw new Exception($"No executable path was specified/detected.");
-                }
-
+                exePath = exePath.IsNotEmpty() ? exePath : $"{Environment.ProcessPath}";
+                string exeName = Path.GetFileNameWithoutExtension(exePath);
                 int ownPid = Environment.ProcessId;
 
-                return Process.GetProcesses().AsParallel().Where(p =>
+                var list = Process.GetProcesses().Where(p =>
                 {
                     try
                     {
-                        string processPath = Path.GetFullPath(p.MainModule?.FileName);
-                        return processPath == Path.GetFullPath(currentExecutablePath) && (!excludeSelf || p.Id != ownPid);
+                        if (p == null || p.SessionId == 0 || p.ProcessName.Low() != exeName.Low())
+                            return false;
+
+                        return Path.GetFullPath(p.MainModule?.FileName) == Path.GetFullPath(exePath) && (!excludeSelf || p.Id != ownPid);
                     }
                     catch
                     {
                         return false;
                     }
                 }).ToList();
+
+                return list;
             }
             catch (Exception ex)
             {
@@ -273,22 +281,29 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Get all instances of a program with the specified executable name. File extension is optional. </summary>
         public static List<Process> GetProgramInstances(string exeName = "")
         {
             try
             {
-                return Process.GetProcesses().AsParallel().Where(p =>
+                exeName = Path.GetFileNameWithoutExtension(exeName);
+
+                var list = Process.GetProcesses().Where(p =>
                 {
                     try
                     {
-                        string procExeName = Path.GetFileName(p.MainModule?.FileName);
-                        return procExeName != null && procExeName.Low().Contains(exeName.Low());
+                        if (p == null || p.SessionId == 0)
+                            return false;
+
+                        return p.ProcessName.Low() == exeName.Low();
                     }
                     catch
                     {
                         return false;
                     }
                 }).ToList();
+
+                return list;
             }
             catch (Exception ex)
             {
@@ -303,14 +318,24 @@ namespace NmkdUtils
             return GetExecutableInstances(exePath, excludeSelf).Count;
         }
 
-        /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"/> </summary>
-        public static string GetEnvVar(string name, string fallbackValue = "", bool userScope = false)
+        /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"./> </summary>
+        public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true)
         {
-            string? value = Environment.GetEnvironmentVariable(name);
+            string? value = "";
+            
+            if(checkSysVars)
+            {
+                value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
+            }
 
-            if (value.IsEmpty())
+            if (checkUserVars && value.IsEmpty())
             {
                 value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User);
+            }
+
+            if (checkProcessVars && value.IsEmpty())
+            {
+                value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Process);
             }
 
             if (value.IsEmpty())
@@ -362,6 +387,42 @@ namespace NmkdUtils
             else if (msg == WinMessage.Maximize) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_MAXIMIZE, IntPtr.Zero);
             else if (msg == WinMessage.Restore) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_RESTORE, IntPtr.Zero);
             else if (msg == WinMessage.CloseX) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_CLOSE, IntPtr.Zero);
+        }
+
+        public static string GetExeFriendlyName (string exePath)
+        {
+            var info = FileVersionInfo.GetVersionInfo(exePath);
+            var name = info.FileDescription;
+
+            if (name.IsEmpty())
+                name = info.ProductName;
+
+            if (name.IsEmpty())
+                name = Path.GetFileNameWithoutExtension(exePath);
+
+            return name.Low().EndsWith(".exe") ? Path.GetFileNameWithoutExtension(name) : name;
+        }
+
+        [DllImport("User32.dll")]
+        private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LASTINPUTINFO
+        {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
+        public static TimeSpan GetIdleTime()
+        {
+            LASTINPUTINFO lastInputInfo = new LASTINPUTINFO();
+            lastInputInfo.cbSize = (uint)Marshal.SizeOf(lastInputInfo);
+            GetLastInputInfo(ref lastInputInfo);
+
+            uint lastInputTick = lastInputInfo.dwTime;
+            uint currentTick = (uint)Environment.TickCount;
+
+            return TimeSpan.FromMilliseconds(currentTick - lastInputTick);
         }
     }
 }
