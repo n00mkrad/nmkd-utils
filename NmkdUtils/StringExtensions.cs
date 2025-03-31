@@ -294,7 +294,7 @@ namespace NmkdUtils
         /// <summary> Shortcut for ToLowerInvariant </summary>
         public static string Low(this string s)
         {
-            if (s == null)
+            if (s.IsEmpty())
                 return s;
 
             return s.ToLowerInvariant();
@@ -303,7 +303,7 @@ namespace NmkdUtils
         /// <summary> Shortcut for ToUpperInvariant </summary>
         public static string Up(this string s)
         {
-            if (s == null)
+            if (s.IsEmpty())
                 return s;
 
             return s.ToUpperInvariant();
@@ -336,13 +336,13 @@ namespace NmkdUtils
             if (s.Length > maxChars)
             {
                 suffix = ellipsis && maxChars > 3 ? "..." : "";
-                return s.Substring(0, maxChars - suffix.Length) + suffix;
+                return string.Concat(s.AsSpan(0, maxChars - suffix.Length), suffix);
             }
 
             return s;
         }
 
-        /// <summary> Shortcut for Replace(myString, string.Empty) </summary>
+        /// <summary> Shortcut for string.Replace(myString, string.Empty) </summary>
         public static string Remove(this string s, string stringToRemove)
         {
             if (s.IsEmpty() || stringToRemove.IsEmpty())
@@ -385,6 +385,7 @@ namespace NmkdUtils
             return patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
         }
 
+        /// <summary> Capitalizes the first char of a string. </summary>
         public static string CapitalizeFirstChar(this string s)
         {
             if (s.IsEmpty())
@@ -393,20 +394,24 @@ namespace NmkdUtils
             return char.ToUpper(s[0]) + s.Substring(1);
         }
 
+        /// <summary>
+        /// Removes text in parentheses, including the parentheses themselves. Optionally removes the leading space before the parentheses.
+        /// </summary>
         public static string RemoveTextInParentheses (this string s, bool includeLeadingSpace = true)
         {
             string pattern = includeLeadingSpace ? @"\s*\([^()]*\)" : @"\([^()]*\)";
             return Regex.Replace(s, pattern, "");
         }
 
+        /// <summary>
+        /// Shortcut for string.Join(separator, source) with a default separator of ", ".
+        /// </summary>
         public static string Join<T>(this IEnumerable<T> source, string separator = ", ")
         {
             return string.Join(separator, source);
         }
 
-        /// <summary>
-        /// Wraps a string in an XML tag (opening and closing)
-        /// </summary>
+        /// <summary> Wraps a string in an XML CDATA tag (opening and closing) </summary>
         public static string WrapXml(this object s, string tag, bool cdata = false)
         {
             return cdata ? $"<{tag}><![CDATA[{s}]]></{tag}>" : $"<{tag}>{s}</{tag}>";
@@ -429,11 +434,13 @@ namespace NmkdUtils
             return Regex.Replace(s, pattern, " ");
         }
 
+        /// <summary> Shortcut for case-insensitive string.Contains </summary>
         public static bool ContainsCi(this string s, string value)
         {
             return s.Contains(value, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary> Checks if a string contains any of the given values. Optionally case-insensitive. </summary>
         public static bool ContainsAny(this string s, IEnumerable<string> values, bool caseIns = false)
         {
             return values.Any(value => s.Contains(value, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
