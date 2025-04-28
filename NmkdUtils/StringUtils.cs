@@ -132,5 +132,15 @@ namespace NmkdUtils
 
             return s.GetInt();
         }
+
+        public static List<string> FindWordRepetitions(string input)
+        {
+            var matches = Regex.Matches(input, @"\b(\w+)\s+\1\b", RegexOptions.IgnoreCase);
+
+            if (matches.Any())
+                return matches.Select(m => m.Groups[1].Value).ToList();
+
+            return [];
+        }
     }
 }
