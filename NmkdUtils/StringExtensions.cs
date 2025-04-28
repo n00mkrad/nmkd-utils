@@ -7,13 +7,13 @@ namespace NmkdUtils
     public static partial class StringExtensions
     {
         /// <summary> Shortcut for !string.IsNullOrWhiteSpace </summary>
-        public static bool IsNotEmpty(this string s)
+        public static bool IsNotEmpty(this string? s)
         {
             return !string.IsNullOrWhiteSpace(s);
         }
 
         /// <summary> Shortcut for string.IsNullOrWhiteSpace </summary>
-        public static bool IsEmpty(this string s)
+        public static bool IsEmpty(this string? s)
         {
             return string.IsNullOrWhiteSpace(s);
         }
@@ -60,9 +60,11 @@ namespace NmkdUtils
 
         [GeneratedRegex("\r\n|\r|\n")]
         private static partial Regex SplitIntoLinesPattern();
-        public static string[] SplitIntoLines(this string str)
+        public static string[] SplitIntoLines(this string str) => SplitIntoLinesPattern().Split(str);
+        public static string[] SplitIntoLinesOut(this string str, out string[] lines)
         {
-            return SplitIntoLinesPattern().Split(str);
+            lines = SplitIntoLines(str);
+            return lines;
         }
 
         /// <summary>
@@ -106,9 +108,9 @@ namespace NmkdUtils
             return true;
         }
 
-        public static float GetFloat(this string str)
+        public static float GetFloat(this string? str)
         {
-            if (str.Length < 1 || str == null)
+            if (str == null || str.Length < 1)
                 return 0f;
 
             string num = str.TrimNumbers(true).Replace(",", ".");
@@ -127,14 +129,14 @@ namespace NmkdUtils
             return s.Trim();
         }
 
-        public static int GetInt(this string str, out bool success, bool allowScientificNotation = false)
+        public static int GetInt(this string? str, out bool success, bool allowScientificNotation = false)
         {
             int i = str.GetInt(allowScientificNotation, failureValue: int.MinValue);
             success = i != int.MinValue;
             return i;
         }
 
-        public static int GetInt(this string str, bool allowScientificNotation = false, int failureValue = 0)
+        public static int GetInt(this string? str, bool allowScientificNotation = false, int failureValue = 0)
         {
             if (str == null || str.Length < 1)
                 return 0;
@@ -158,9 +160,9 @@ namespace NmkdUtils
         }
 
         /// <summary> Somewhat basic check to determine if a number string appears to be written as scientific notation </summary>
-        private static bool CouldBeScientificNotation(string s)
+        private static bool CouldBeScientificNotation(string? s)
         {
-            if (!(s.ToLowerInvariant().Contains("e+") || s.ToLowerInvariant().Contains("e-")))
+            if (s is null || !(s.Contains("e+", StringComparison.OrdinalIgnoreCase) || s.Contains("e-", StringComparison.OrdinalIgnoreCase)))
                 return false;
 
             if (s[0] == 'e' || s.Last() == '+' || s.Last() == '-') // e must be in the middle, can't be first char (and +- can't be last)
@@ -210,7 +212,7 @@ namespace NmkdUtils
             if (str == null)
                 return [];
 
-            return str.Split(new string[] { trimStr }, StringSplitOptions.None);
+            return str.Split([trimStr], StringSplitOptions.None);
         }
 
         /// <summary> Checks if a string is an integer (consists only of numbers) </summary>
@@ -282,13 +284,24 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
-        public static string RemoveLineBreaks(this string input, string delimiter = " ")
+        public static string RemoveLineBreaks(this string s, string delimiter = " ")
         {
-            if (input.IsEmpty())
-                return input;
+            if (s.IsEmpty())
+                return s;
 
             string pattern = @"(?:\r\n|\r|\n)+"; // matches one or more occurrences of \r\n (Windows), \n (Unix), or \r (older Macs)
-            return Regex.Replace(input, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
+            return Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
+        }
+
+        /// <summary>
+        /// Removes empty/whitespace lines. If <paramref name="newLine"/> is not passed, Environment.NewLine is used for joining.
+        /// </summary>
+        public static string RemoveEmptyLines(this string s, string? newLine = null)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            return s.SplitIntoLines().Where(l => l.IsNotEmpty()).Join(Environment.NewLine);
         }
 
         /// <summary> Shortcut for ToLowerInvariant </summary>
