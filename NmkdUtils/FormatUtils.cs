@@ -25,12 +25,16 @@ namespace NmkdUtils
             }
         }
 
-        public static string Time(TimeSpan ts, bool forceDecimals = false)
+        /// <summary>
+        /// Converts a TimeSpan <paramref name="ts"/> into a string. <paramref name="forceDecimals"/> forces decimals for seconds (e.g. 1.00 instead of 1).
+        /// <paramref name="noDays"/> will limit the output to hours, minutes and seconds in case it's more than 24 hours.
+        /// </summary>
+        public static string Time(TimeSpan ts, bool forceDecimals = false, bool noDays = true)
         {
-            return Time((long)ts.TotalMilliseconds, forceDecimals: forceDecimals);
+            return Time((long)ts.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
         }
 
-        public static string Time(long milliseconds, bool forceDecimals = false)
+        public static string Time(long milliseconds, bool forceDecimals = false, bool noDays = true)
         {
             if (milliseconds < 200)
             {
@@ -47,7 +51,7 @@ namespace NmkdUtils
                 int seconds = (int)((milliseconds % 60000) / 1000);
                 return $"{minutes:D2}:{seconds:D2}";
             }
-            else if (milliseconds < 86400000)
+            else if (milliseconds < 86400000 || milliseconds >= 86400000 && noDays)
             {
                 int hours = (int)(milliseconds / 3600000);
                 int minutes = (int)((milliseconds % 3600000) / 60000);
