@@ -13,8 +13,10 @@ namespace NmkdUtils
             public string Family { get; set; }
             /// <summary> Language Name in English (e.g. "Dutch") </summary>
             public string Name { get; set; }
-            /// <summary> Language Name in native Language (e.g. "Nederlands") </summary>
+            /// <summary> Language Name(s) in native Language (e.g. "Nederlands") </summary>
             public string NativeName { get; set; }
+            /// <summary> Language Name(s) in native Language, as List for cases where there are multiple names </summary>
+            public List<string> NativeNames => NativeName.Split(",").Select(n => n.Trim()).ToList();
             /// <summary> ISO 639-1 code (2 chars, e.g. "nl") </summary>
             public string Iso6391 { get; set; }
             /// <summary> ISO 639-2 code (3 chars, based on native name, e.g. "nld") </summary>
