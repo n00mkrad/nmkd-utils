@@ -1,5 +1,7 @@
 ﻿
 
+using Newtonsoft.Json.Linq;
+
 namespace NmkdUtils
 {
     public static class ParsingExtensions
@@ -55,6 +57,24 @@ namespace NmkdUtils
         public static List<string> GetValues<T>() where T : Enum
         {
             return Enum.GetNames(typeof(T)).ToList();
+        }
+
+        public static bool TryParseToJObject (this string json, out JObject jo, bool printErr = true, bool printTextWithErr = false)
+        {
+            try
+            {
+                jo = JObject.Parse(json);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if(printErr)
+                {
+                    Logger.LogErr($"Failed to parse JSON: {ex.Message}{(printTextWithErr ? $"\n{json}" : "")}");
+                }
+                jo = new JObject();
+                return false;
+            }
         }
     }
 }
