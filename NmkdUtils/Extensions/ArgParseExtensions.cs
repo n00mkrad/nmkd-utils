@@ -89,29 +89,67 @@ namespace NmkdUtils.Extensions
         public static string GetHelpStr(this Options opts, bool pad = true, bool linebreaks = false, bool newLines = false)
         {
             var lines = new List<string>();
-            var lengths = new List<int>();
+            string looseStr = "<>";
+            var allNames = new List<List<string>>();
 
             if (newLines)
             {
                 lines.Add("");
             }
 
+            // Collect and filter each option's names
             foreach (var opt in opts.OptionsSet)
             {
-                string names = opt.GetNames().Select(s => $"-{s}").Join();
-                lengths.Add(names.Length);
+                var namesList = opt.GetNames().Select(s => $"-{s}".Replace("-<>", looseStr)).ToList();
+
+                if (namesList.Contains(looseStr) && !opts.PrintLooseArgs)
+                    continue;
+
+                allNames.Add(namesList);
             }
 
-            string looseStr = "<Loose Arguments>";
-            var maxLen = Math.Max(lengths.Max(), looseStr.Length);
+            // Compute maximum width for each alias column
+            var colWidths = new List<int>();
+            if (allNames.Any())
+            {
+                int maxCols = allNames.Max(n => n.Count);
+                for (int i = 0; i < maxCols; i++)
+                    colWidths.Add(0);
 
+                foreach (var namesList in allNames)
+                {
+                    for (int i = 0; i < namesList.Count; i++)
+                        colWidths[i] = Math.Max(colWidths[i], namesList[i].Length);
+                }
+            }
+
+            // Build each help line with proper padding
             foreach (var opt in opts.OptionsSet)
             {
                 var names = opt.GetNames().Select(s => $"-{s}".Replace("-<>", looseStr)).ToList();
-                if (names.Contains(looseStr) && !opts.PrintLooseArgs) continue;
+
+                if (names.Contains(looseStr) && !opts.PrintLooseArgs)
+                    continue;
+
+                string namesStr;
+                if (pad)
+                {
+                    var padded = new List<string>();
+                    for (int i = 0; i < names.Count; i++)
+                        padded.Add(names[i].PadRight(colWidths[i]));
+                    // add empty columns for missing aliases
+                    for (int i = names.Count; i < colWidths.Count; i++)
+                        padded.Add(new string(' ', colWidths[i]));
+                    namesStr = padded.Join(" ");
+                }
+                else
+                {
+                    namesStr = names.Join(" ");
+                }
+
                 string v = opt.OptionValueType == NDesk.Options.OptionValueType.None ? "        " : " <VALUE>";
                 string desc = opt.Description.IsEmpty() ? "?" : opt.Description;
-                lines.Add(pad ? $"{names.Join().PadRight(maxLen)}{v} : {desc}" : $"{names.Join()}{v} : {desc}");
+                lines.Add($"{namesStr}{v} : {desc}");
 
                 if (newLines)
                 {
