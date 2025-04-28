@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using static NmkdUtils.CodeUtils;
 
 namespace NmkdUtils
@@ -71,6 +72,7 @@ namespace NmkdUtils
 
         static Logger()
         {
+            try { Console.OutputEncoding = Encoding.UTF8; } catch { }
             LogsDir = PathUtils.GetCommonSubdir(PathUtils.CommonDir.Logs);
             _debugger = Debugger.IsAttached;
             _loggingThread = new Thread(new ThreadStart(ProcessLogQueue)) { IsBackground = true };
