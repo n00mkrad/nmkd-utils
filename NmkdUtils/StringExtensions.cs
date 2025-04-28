@@ -244,12 +244,12 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces only the first occurence of a string in a string </summary>
-        public static string ReplaceFirst(this string s, string find, string replace)
+        public static string ReplaceFirst(this string s, string find, string replace, bool caseIns = true)
         {
             if (s.IsEmpty())
                 return s;
 
-            int place = s.IndexOf(find);
+            int place = s.IndexOf(find, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
             if (place == -1)
                 return s;
@@ -272,15 +272,15 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces a string if it starts with the <paramref name="find"/> string. Ignores later occurences unless <paramref name="firstOccurenceOnly"/> is false. </summary>
-        public static string ReplaceAtStart(this string s, string find, string replace, bool firstOccurenceOnly = true)
+        public static string ReplaceAtStart(this string s, string find, string replace, bool firstOccurenceOnly = true, bool caseIns = false)
         {
             if(s.IsEmpty() || !s.StartsWith(find))
                 return s;
 
             if (firstOccurenceOnly)
-                return s.ReplaceFirst(find, replace);
+                return s.ReplaceFirst(find, replace, caseIns);
             else
-                return s.Replace(find, replace);
+                return s.Replace(find, replace, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
