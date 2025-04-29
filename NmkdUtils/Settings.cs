@@ -2,7 +2,6 @@
 {
     public class Settings
     {
-        public static string FfmpegPath = "ffmpeg";
-        public static string FfprobePath = "ffprobe";
+        public static Dictionary<string, string>? CommandPathsDict = null;
     }
 }

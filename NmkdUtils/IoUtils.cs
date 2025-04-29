@@ -28,7 +28,7 @@ namespace NmkdUtils
             try
             {
                 if (path.IsEmpty() || !Directory.Exists(path))
-                    return new string[0];
+                    return [];
 
                 SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
                 return Directory.GetFiles(path, pattern, opt).OrderBy(x => Path.GetFileName(x)).ToArray();
@@ -36,7 +36,7 @@ namespace NmkdUtils
             catch (Exception ex)
             {
                 Console.WriteLine($"GetFilesSorted error: {ex.Message}", true);
-                return new string[0];
+                return [];
             }
         }
 
@@ -46,7 +46,7 @@ namespace NmkdUtils
             try
             {
                 if (path.IsEmpty() || !Directory.Exists(path))
-                    return new FileInfo[0];
+                    return [];
 
 
                 SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -56,49 +56,62 @@ namespace NmkdUtils
             catch (Exception ex)
             {
                 Logger.Log(ex, $"GetFileInfosSorted error");
-                return new FileInfo[0];
+                return [];
             }
         }
 
         /// <summary> Get directories sorted by name (manual recursion to ignore inaccessible entries) </summary>
-        public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = false)
+        public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = true)
         {
-            List<DirectoryInfo> directories = new List<DirectoryInfo>();
+            return GetDirInfosSorted(root, recursive ? int.MaxValue : 0, pattern, noWarnings);
+        }
 
-            if (root == null || !Directory.Exists(root))
-                return directories.ToArray();
+        /// <summary>
+        /// Get directories in <paramref name="root"/>, filtered with wildcard <paramref name="pattern"/>, sorted by name, with a maximum recursion depth <paramref name="maxDepth"/> (0 = No recursion).<br/>
+        /// </summary>
+        public static DirectoryInfo[] GetDirInfosSorted(string root, int maxDepth = 0, string pattern = "*", bool noWarnings = true)
+        {
+            // Guard clause: if root is invalid or doesn't exist, return empty
+            if (root.IsEmpty() || !Directory.Exists(root))
+                return [];
 
-            Stack<string> pending = new Stack<string>();
-            pending.Push(root);
+            var directories = new List<DirectoryInfo>();
+
+            // Use a stack to track directories along with their current depth
+            var pending = new Stack<(string Path, int Depth)>();
+            pending.Push((root, 0));
 
             while (pending.Count > 0)
             {
-                string currentDir = pending.Pop();
+                var (currentDir, depth) = pending.Pop();
+
                 try
                 {
-                    // Add current directory to the list
-                    DirectoryInfo dirInfo = new DirectoryInfo(currentDir);
-                    directories.Add(dirInfo);
+                    // Add current directory info to the list
+                    directories.Add(new DirectoryInfo(currentDir));
 
-                    if (recursive)
+                    if (depth >= maxDepth)
+                        continue;
+
+                    // Add subdirectories to the stack
+                    foreach (var directory in Directory.GetDirectories(currentDir, pattern))
                     {
-                        // Add subdirectories to stack
-                        foreach (var directory in Directory.GetDirectories(currentDir, pattern))
-                        {
-                            pending.Push(directory);
-                        }
+                        pending.Push((directory, depth + 1));
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log the error and continue with the next directory
-                    // Logger.LogWrn($"{currentDir}: {ex.Message}");
+                    if (!noWarnings)
+                    {
+                        Logger.LogWrn($"{nameof(GetDirInfosSorted)} - {currentDir}: {ex.Message}");
+                    }
                 }
             }
 
             // Sort the directories by name and return
             return directories.OrderBy(d => d.Name).ToArray();
         }
+
 
         /// <summary> Sends a file to the recycle bin </summary>
         public static bool RecycleFile(string path)
@@ -559,6 +572,84 @@ namespace NmkdUtils
         {
             using var img = Image.FromFile(path);
             return new Bitmap(img); // clones it in memory.
+        }
+
+        public static string GetProgram(string executable, bool allowPrompt = false) => GetProgram(executable, ref Settings.CommandPathsDict, allowPrompt);
+
+        /// <summary> Gets the path to an executable by checking (in order): Config, environment (PATH), common installation directories. <br/>
+        /// If not found, it can prompt the user for a path (<paramref name="allowInteraction"/>). This user-provided path gets saved in the config by default (<paramref name="allowWriteBack"/>) </summary>
+        public static string GetProgram(string executable, ref Dictionary<string, string>? configDict, bool allowInteraction = false, bool allowWriteBack = true)
+        {
+            if (executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                executable = executable.Remove(executable.Length - 4);
+
+            string GetExePath(string p, out string full) // If directory was specified, get the exe path
+            {
+                full = p.EndsWith($"{executable}.exe", StringComparison.OrdinalIgnoreCase) ? p : Path.Combine(p.TrimEnd(Path.DirectorySeparatorChar), $"{executable}.exe");
+                return full;
+            }
+
+            // 1) Check config
+            if (configDict != null && configDict.Get(executable, out var confPath, "") && File.Exists(confPath))
+                return confPath;
+
+            // 2) Check if in PATH
+            string exeFromEnv = OsUtils.GetEnvExecutable(executable).FirstOrDefault("");
+            if (File.Exists(exeFromEnv))
+                return exeFromEnv;
+
+            // 3) Check common default locations
+            foreach (var path in new[] { "C:\\Program Files", "C:\\Program Files (x86)", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) })
+            {
+                // Get all subdirectories that could be the program's folder by checking first 3 characters while removing spaces
+                foreach (var subDir in Directory.GetDirectories(path))
+                {
+                    if (!Path.GetFileName(subDir).Low().Replace(" ", "").StartsWith(executable.Replace(" ", "").Low().Substring(0, 3)))
+                        continue;
+
+                    string exePath = Path.Combine(subDir, $"{executable}.exe");
+
+                    if (File.Exists(exePath))
+                    {
+                        if (allowWriteBack)
+                        {
+                            configDict.Set(executable, exePath);
+                        }
+
+                        Logger.Log($"Using {executable} from common install dir: {exePath}", Logger.Level.Debug);
+                        return exePath;
+                    }
+
+                    Logger.Log($"Could not find {executable}.exe in {subDir}", Logger.Level.Debug);
+                }
+            }
+
+            if (!allowInteraction)
+            {
+                return "";
+            }
+
+            Logger.Log($"Unable to find {executable}.", Logger.Level.Warning);
+
+            // 4) Ask user for path
+            string userCommand = CliUtils.ReadLine($"Enter path (or command) to {executable}:"); // Prompt user to input path
+
+            if (File.Exists(GetExePath(userCommand, out string pInput)) || Path.Exists(OsUtils.GetEnvExecutable(userCommand).FirstOrDefault("")))
+            {
+                if (configDict == null)
+                    return pInput;
+
+                bool save = CliUtils.ReadLine($"Save this {executable} command to config? (Y/N)").Trim().Low() == "y";
+
+                if (save)
+                {
+                    configDict[executable] = pInput;
+                }
+
+                return pInput;
+            }
+
+            return "";
         }
     }
 }

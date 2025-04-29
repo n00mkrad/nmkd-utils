@@ -18,12 +18,13 @@ namespace NmkdUtils.Media
         public Dictionary<string, int> Disposition { get; set; }
         public Dictionary<string, string> Tags { get; set; }
         public List<Dictionary<string, string>> SideData { get; set; }
+        [JsonIgnore] public TimeSpan Duration => Values.Get("duration", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : FfmpegUtils.GetTimespanFromFfprobe(Tags);
         [JsonIgnore] public int KbpsDemuxed { get; set; } = 0;
-        [JsonIgnore] public string Title => Tags.Get("title", "");
-        [JsonIgnore] public int Kbps => (Values.Get("bit_rate").IsNotEmpty() ? Values.Get("bit_rate", "0").GetInt() : Tags.Get("BPS", "0").GetInt()) / 1000;
-        [JsonIgnore] public string Language => Tags.Get("language", "");
+        [JsonIgnore] public string Title => Tags.GetStr("title");
+        [JsonIgnore] public int Kbps => (Values.GetStr("bit_rate").IsNotEmpty() ? Values.Get("bit_rate").GetInt() : Tags.Get("BPS").GetInt()) / 1000;
+        [JsonIgnore] public string Language => Tags.GetStr("language");
         [JsonIgnore] public LanguageUtils.Language? LanguageParsed => LanguageUtils.GetLangByCode(Language);
-        [JsonIgnore] public DateTime CreationTime => DateTime.Parse(Tags.Get("creation_time", ""), null, DateTimeStyles.RoundtripKind);
+        [JsonIgnore] public DateTime CreationTime => DateTime.Parse(Tags.GetStr("creation_time"), null, DateTimeStyles.RoundtripKind);
         [JsonIgnore] public bool Default => Disposition.Get("default") == 1;
         [JsonIgnore] public string CodecFriendly => Aliases.GetFriendlyCodecName(Codec);
 
@@ -118,7 +119,9 @@ namespace NmkdUtils.Media
                 return "";
             }
 
-            if (Type == CodecType.Video)
+            bool videoIsAttachment = Type == CodecType.Video && Tags.Get("filename").IsNotEmpty();
+
+            if (Type == CodecType.Video && !videoIsAttachment)
             {
                 var v = new VideoStream(this, ((VideoStream)this).FrameData);
                 infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile).PadRight(codecPadding));
@@ -127,14 +130,15 @@ namespace NmkdUtils.Media
                 infos.Add(GetBitrateStr(v));
                 infos.Add($"{v.PixFmt.Up()} ({FormatUtils.Media.BitDepthFromPixFmt(v.PixFmt)}-bit)");
                 infos.Add(v.Hdr ? "HDR" : "");
-                infos.Add(v.DoviProfile >= 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
+                infos.Add(v.DoviProfile > 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
                 infos.Add(v.Hdr10Plus ? $"HDR10+" : "");
-                infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS"); ;
+                // infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS{(v.AvgFps.Float.EqualsRoughly(v.Fps.Float, 4.0f) ? "" : $" (est. {v.AvgFps.Float.ToString("0.########")})")}");
+                infos.Add(v.SeemsVfr ? $"{v.AvgFps.Float.ToString("0.########")} FPS (Specified: {v.Fps})" : $"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS");
                 infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                 infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
                 infos.Add(v.Sar.IsNotEmpty() && v.Sar != "1:1" ? $"SAR {v.Sar}" : "");
                 infos.Add(v.Dar.IsNotEmpty() ? $"DAR {v.Dar}" : "");
-                infos.Add(v.Tags.Get("filename").IsNotEmpty() ? $"'{v.Tags.Get("filename")}'" : "");
+                infos.Add(v.Tags.Get("filename", out var fname, "") ? $"'{fname}'" : "");
             }
             else if (Type == CodecType.Audio)
             {
@@ -163,7 +167,7 @@ namespace NmkdUtils.Media
                 var d = new DataStream(this);
                 infos.Add(d.HandlerName.IsEmpty() ? d.CodecTagString.Up() : $"{d.CodecTagString.Up()} ({d.HandlerName})");
             }
-            else if (Type == CodecType.Attachment)
+            else if (Type == CodecType.Attachment || videoIsAttachment)
             {
                 var at = new AttachmentStream(this);
                 int filenamePad = parentMedia == null ? 0 : parentMedia.Streams.Where(s => s.Type == CodecType.Attachment).Max(s => ((AttachmentStream)s).Filename.Length);
@@ -180,24 +184,26 @@ namespace NmkdUtils.Media
         public ColorMasteringData? ColorData { get; set; } = null;
         [JsonIgnore] public int Width => Values.Get("width", "").GetInt();
         [JsonIgnore] public int Height => Values.Get("height", "").GetInt();
-        [JsonIgnore] public string PixFmt => Values.Get("pix_fmt", "");
+        [JsonIgnore] public int ResSum => Width + Height;
+        [JsonIgnore] public string PixFmt => Values.Get("pix_fmt");
         [JsonIgnore] public bool Hdr => ColorTransfer == "smpte2084" && ColorPrimaries == "bt2020";
-        [JsonIgnore] public bool LimitedRange => Values.Get("color_range", "tv") == "tv";
-        [JsonIgnore] public string ColorSpace => Values.Get("color_space", "");
-        [JsonIgnore] public string ColorTransfer => Values.Get("color_transfer", "");
-        [JsonIgnore] public string ColorPrimaries => Values.Get("color_primaries", "");
-        [JsonIgnore] public string Sar => Values.Get("sample_aspect_ratio", "");
-        [JsonIgnore] public string Dar => Values.Get("display_aspect_ratio", "");
+        [JsonIgnore] public string ColorRange => Values.Get("color_range", "tv"); // Assume Limited Range (tv) if not found
+        [JsonIgnore] public string ColorSpace => Values.Get("color_space", "bt709"); // Assume bt.709 if not found
+        [JsonIgnore] public string ColorTransfer => Values.Get("color_transfer", "bt709"); // Assume bt.709 if not found
+        [JsonIgnore] public string ColorPrimaries => Values.Get("color_primaries", "bt709"); // Assume bt.709 if not found
+        [JsonIgnore] public bool LimitedRange => ColorRange == "tv";
+        [JsonIgnore] public string Sar => Values.Get("sample_aspect_ratio");
+        [JsonIgnore] public string Dar => Values.Get("display_aspect_ratio");
         [JsonIgnore] public Size ScaledRes => GetScaledRes();
         [JsonIgnore] public Fraction Fps => new Fraction(Values.Get("r_frame_rate", ""));
         [JsonIgnore] public Fraction AvgFps => new Fraction(Values.Get("avg_frame_rate", ""));
-        [JsonIgnore] public string Profile => Values.Get("profile", "");
-        [JsonIgnore] public int DoviProfile => SideData == null ? -1 : SideData.Where(x => x.ContainsKey("dv_profile")).FirstOrDefault().Get("dv_profile", "-1").GetInt();
-        // public int Rotation => SideData == null ? 0 : SideData.Where(x => x.ContainsKey("...")).FirstOrDefault().Get("...", "0").GetInt();
-        [JsonIgnore] public bool Hdr10Plus => FrameData == null || FrameData.SideData == null ? false : FrameData.SideData.Any(item => item["side_data_type"] != null && item["side_data_type"].ToString().Contains("HDR10+"));
-        [JsonIgnore] public TimeSpan Duration => FfmpegUtils.GetTimespanFromFfprobe(Tags);
+        [JsonIgnore] public bool SeemsVfr => Math.Abs(Fps.Float - AvgFps.Float) / ((Fps.Float + AvgFps.Float) / 2f) > 0.2f;
+        [JsonIgnore] public string Profile => Values.Get("profile");
+        [JsonIgnore] public int DoviProfile => SideData?.FirstOrDefault(x => x.ContainsKey("dv_profile")).Get("dv_profile", "-1").GetInt() ?? -1;
+        [JsonIgnore] public int Rotation => SideData?.FirstOrDefault(x => x.ContainsKey("rotation")).Get("rotation", "0").GetInt() ?? 0;
+        [JsonIgnore] public bool Hdr10Plus => FrameData?.SideData?.Any(e => $"{e["side_data_type"]}".Contains("HDR10+")) ?? false;
 
-        public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed; }
+        public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData? cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed; }
 
         // Scale using SAR (Sample Aspect Ratio) for non-square pixels
         private Size GetScaledRes()
@@ -215,13 +221,11 @@ namespace NmkdUtils.Media
     public class AudioStream : Stream
     {
         [JsonIgnore] public string Profile => Values.Get("profile");
-        [JsonIgnore] public string SampleFmt => Values.Get("sample_fmt", "");
+        [JsonIgnore] public string SampleFmt => Values.Get("sample_fmt");
         [JsonIgnore] public int SampleRate => Values.Get("sample_rate").GetInt();
         [JsonIgnore] public int Channels => Values.Get("channels").GetInt();
-        [JsonIgnore] public string ChannelLayout => Values.Get("channel_layout", "");
+        [JsonIgnore] public string ChannelLayout => Values.Get("channel_layout");
         [JsonIgnore] public bool Atmos => Profile.Contains("+ Dolby Atmos");
-        [JsonIgnore] public TimeSpan Duration => FfmpegUtils.GetTimespanFromFfprobe(Tags);
-
         public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; KbpsDemuxed = s.KbpsDemuxed; }
     }
 

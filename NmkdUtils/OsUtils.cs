@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -47,6 +48,7 @@ namespace NmkdUtils
             public bool PrintExitCode { get; set; } = false;
             public int PrintOutputLines { get; set; } = 0;
             public ProcessPriorityClass? Priority { get; set; } = null;
+            public bool Utf8 { get; set; } = true;
             public Func<bool>? Killswitch { get; set; } = null;
             public int KillswitchCheckIntervalMs = 1000;
             public OutputDelegate? OnStdout;
@@ -73,7 +75,7 @@ namespace NmkdUtils
             public string RunTimeStr => FormatUtils.Time(RunTime);
         }
 
-        public static string RunCommand(string command, int printOutputLines = 0, bool printExitCode = false)
+        public static string Run(string command, int printOutputLines = 0, bool printExitCode = false)
         {
             return Run(new RunConfig(command, printOutputLines, printExitCode)).Output;
         }
@@ -111,6 +113,8 @@ namespace NmkdUtils
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true,
+                    StandardOutputEncoding = cfg.Utf8 ? Encoding.UTF8 : null,
+                    StandardErrorEncoding = cfg.Utf8 ? Encoding.UTF8 : null,
                 };
 
                 Log($"{startInfo.FileName} {startInfo.Arguments}", Level.Verbose);
@@ -322,8 +326,8 @@ namespace NmkdUtils
         public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true)
         {
             string? value = "";
-            
-            if(checkSysVars)
+
+            if (checkSysVars)
             {
                 value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
             }
@@ -362,14 +366,36 @@ namespace NmkdUtils
             Log($"Process priority changed to {self.PriorityClass}", Level.Debug);
         }
 
-        public static string[] GetPathExecutables(string name)
+        private static readonly ConcurrentDictionary<string, List<string>> _envExecutablesCache = [];
+
+        public static List<string> GetEnvExecutable(string name, bool stopAfterFirst = true)
         {
-            var whereOutput = RunCommand($"where {name.Wrap()}").SplitIntoLines();
+            return _envExecutablesCache.GetOrAdd(name, GetEnvExecutablesNoCache(name, stopAfterFirst));
+        }
 
-            if (whereOutput == null || whereOutput.Length < 1)
-                return [];
+        public static List<string> GetEnvExecutablesNoCache(string name, bool stopAfterFirst = true)
+        {
+            var exts = new string[] { ".exe", ".bat", ".cmd" };
+            List<string> paths = [];
+            List<string> dirs = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Process).Split(';').Concat(Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine).Split(';')).Distinct().ToList();
 
-            return whereOutput.Where(File.Exists).ToArray();
+            foreach (var dir in dirs)
+            {
+                foreach (var ext in exts)
+                {
+                    var path = Path.Combine(dir, $"{name}{ext}");
+
+                    if (!File.Exists(path))
+                        continue;
+
+                    paths.Add(path);
+
+                    if (stopAfterFirst)
+                        return paths;
+                }
+            }
+
+            return paths;
         }
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -389,7 +415,7 @@ namespace NmkdUtils
             else if (msg == WinMessage.CloseX) SendMessage(proc.MainWindowHandle, WindowMsgs.WM_SYSCOMMAND, (IntPtr)WindowMsgs.SC_CLOSE, IntPtr.Zero);
         }
 
-        public static string GetExeFriendlyName (string exePath)
+        public static string GetExeFriendlyName(string exePath)
         {
             var info = FileVersionInfo.GetVersionInfo(exePath);
             var name = info.FileDescription;

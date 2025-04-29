@@ -5,7 +5,14 @@ namespace NmkdUtils
     public static class ObjectExtensions
     {
         /// <summary> Get a value from a dictionary, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
-        public static TValue Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue fallback = default)
+        public static string GetStr<TKey, TValue>(this IDictionary<TKey, TValue>? dictionary, TKey key, string fallback = "")
+        {
+            var result = dictionary.Get(key, (TValue)(object)fallback);
+            return result is null ? fallback : $"{result}";
+        }
+
+        /// <summary> Get a value from a dictionary, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
+        public static TValue? Get<TKey, TValue>(this IDictionary<TKey, TValue>? dictionary, TKey key, TValue? fallback = default)
         {
             // For string values, use empty string instead of null as default value
             if (typeof(TValue) == typeof(string) && fallback is null)
@@ -20,10 +27,29 @@ namespace NmkdUtils
         }
 
         // Same as above, but with out parameter
-        public static bool Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue value, TValue fallback = default)
+        public static bool Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue? value, TValue? fallback = default)
         {
             value = dictionary.Get(key, fallback);
-            return !value.Equals(fallback);
+            return value is not null && !value.Equals(fallback);
+        }
+
+        /// <summary>
+        /// Sets a <paramref name="key"/> to a <paramref name="value"/> in dictionary <paramref name="dict"/> if it is not null. If the key already exists, its value is updated.
+        /// </summary>
+        /// <returns> True if the key already existed, False if it was added, null if the dictionary is null. </returns>
+        public static bool? Set<TKey, TValue>(this IDictionary<TKey, TValue>? dict, TKey key, TValue value)
+        {
+            if (dict == null)
+                return null;
+
+            if (dict.ContainsKey(key))
+            {
+                dict[key] = value;
+                return true;
+            }
+
+            dict.Add(key, value);
+            return false;
         }
 
         /// <summary> Adds a <paramref name="value"/> to a dictionary of lists; creates a new list if there is none yet. </summary>
@@ -80,7 +106,7 @@ namespace NmkdUtils
             if (o is string s)
                 return s;
 
-            int maxItemsRecursion =  (maxListItems - 1).Clamp(2);
+            int maxItemsRecursion = (maxListItems - 1).Clamp(2);
 
             if (o is IList list)
             {
@@ -109,6 +135,42 @@ namespace NmkdUtils
             }
 
             return $"{o}";
+        }
+
+        /// <summary>
+        /// Checks if the exception is of one or more specified <paramref name="types"/> or if it contains an inner exception with the type(s).<br/>
+        /// If <paramref name="mustHaveAll"/> is true, AggregateExceptions need to contain all <paramref name="types"/> for it to return true.
+        /// </summary>
+        public static bool IsOrContains(this Exception ex, List<Type> types, bool mustHaveAll = false)
+        {
+            if (ex == null || types == null || types.Count < 1)
+                return false;
+
+            List<Type> list = [ex.GetType()];
+            // If ex is an AggregateException, use just the inner exceptions
+            if (ex is AggregateException aggEx)
+            {
+                list = aggEx.InnerExceptions.Select(e => e.GetType()).ToList();
+            }
+
+            if (list.Count == 1)
+                return types.Contains(list[0]);
+
+            if (mustHaveAll)
+                return types.All(t => list.Contains(t));
+
+            return types.Any(t => list.Contains(t));
+        }
+
+        /// <summary>
+        /// Returns the type(s) of the exception or, in the case of an AggregateException, the types of the inner exceptions.<br/>
+        /// </summary>
+        public static List<string> GetTypes(this Exception ex)
+        {
+            if (ex is AggregateException aggEx)
+                return aggEx.InnerExceptions.Select(e => e.GetType().ToString()).ToList();
+
+            return [ex.GetType().ToString()];
         }
     }
 }

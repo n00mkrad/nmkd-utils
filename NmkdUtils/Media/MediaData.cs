@@ -7,10 +7,9 @@ namespace NmkdUtils.Media
 {
     public class MediaData
     {
-        public enum CodecType
-        {
-            Audio, Video, Subtitle, Data, Attachment, Unknown
-        }
+        public enum CodecType { Audio, Video, Subtitle, Data, Attachment, Unknown }
+        public enum Primaries { None, P3, Rec709, Rec2020, Unknown }
+        public enum WhitePoint { None, D65, D63, D60, Unknown }
 
         public class Format
         {
@@ -72,53 +71,79 @@ namespace NmkdUtils.Media
 
         public class ColorMasteringData
         {
-            public Fraction RedX { get; private set; }
-            public Fraction RedY { get; private set; }
-            public Fraction GreenX { get; private set; }
-            public Fraction GreenY { get; private set; }
-            public Fraction BlueX { get; private set; }
-            public Fraction BlueY { get; private set; }
-            public Fraction WhiteX { get; private set; }
-            public Fraction WhiteY { get; private set; }
-            public Fraction MinLuminance { get; private set; }
-            public Fraction MaxLuminance { get; private set; }
-            public int MaxContentLightLevel { get; private set; }
-            public int AvgContentLightLevel { get; private set; }
+            public static readonly Dictionary<Primaries, (float[] R, float[] G, float[] B)> ColorPrimariesReference = new()
+            {
+                { Primaries.P3, (new[] { 0.680f, 0.320f }, new[] { 0.265f, 0.690f }, new[] { 0.150f, 0.060f }) },
+                { Primaries.Rec709, (new[] { 0.640f, 0.330f }, new[] { 0.300f, 0.600f }, new[] { 0.150f, 0.060f }) },
+                { Primaries.Rec2020, (new[] { 0.708f, 0.292f }, new[] { 0.170f, 0.797f }, new[] { 0.131f, 0.046f }) }
+            };
 
-            public ColorMasteringData(JArray frameSideData)
+            public static readonly Dictionary<WhitePoint, float[]> WhitePointReference = new()
+            {
+                { WhitePoint.D65, new[] { 0.3127f, 0.3290f } },
+                { WhitePoint.D63, new[] { 0.3142f, 0.3516f } },
+                { WhitePoint.D60, new[] { 0.32168f, 0.33767f } }
+            };
+
+            public Fraction[] RedRaw { get; private set; } = [];
+            public Fraction[] GreenRaw { get; private set; } = [];
+            public Fraction[] BlueRaw { get; private set; } = [];
+            public Fraction[] WhitepointRaw { get; private set; } = [];
+            public Fraction[] LuminanceRangeRaw { get; private set; } = [];
+            public float[] Red { get; private set; } = [];
+            public float[] Green { get; private set; } = [];
+            public float[] Blue { get; private set; } = [];
+            public float[] Whitepoint { get; private set; } = [];
+            public float? MinLuminance { get; private set; } = null;
+            public float? MaxLuminance { get; private set; } = null;
+            public int? MaxCll { get; private set; } = null;
+            public int? MaxFall { get; private set; } = null;
+            public Primaries Primaries { get; private set; } = Primaries.None;
+            public WhitePoint WhitePoint { get; private set; } = WhitePoint.None;
+
+            public ColorMasteringData(JArray? frameSideData)
             {
                 if (frameSideData == null)
                     return;
 
-                var colorDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Mastering display metadata").FirstOrDefault();
-                var lightDict = frameSideData.Where(x => $"{x["side_data_type"]}" == "Content light level metadata").FirstOrDefault();
+                var masteringDict = frameSideData.Where(sd => $"{sd["side_data_type"]}" == "Mastering display metadata").FirstOrDefault();
+                var contentLightDict = frameSideData.Where(sd => $"{sd["side_data_type"]}" == "Content light level metadata").FirstOrDefault();
 
-                if (colorDict != null)
+                if (masteringDict != null)
                 {
-                    var colorValues = colorDict.ToObject<Dictionary<string, string>>();
-                    RedX = new Fraction(colorValues.Get("red_x"));
-                    RedY = new Fraction(colorValues.Get("red_y"));
-                    GreenX = new Fraction(colorValues.Get("green_x"));
-                    GreenY = new Fraction(colorValues.Get("green_y"));
-                    BlueX = new Fraction(colorValues.Get("blue_x"));
-                    BlueY = new Fraction(colorValues.Get("blue_y"));
-                    WhiteX = new Fraction(colorValues.Get("white_point_x"));
-                    WhiteY = new Fraction(colorValues.Get("white_point_y"));
-                    MinLuminance = new Fraction(colorValues.Get("min_luminance"));
-                    MaxLuminance = new Fraction(colorValues.Get("max_luminance"));
+                    var vals = masteringDict.ToObject<Dictionary<string, string>>();
+                    RedRaw = [new Fraction(vals.Get("red_x")!), new Fraction(vals.Get("red_y")!)];
+                    GreenRaw = [new Fraction(vals.Get("green_x")!), new Fraction(vals.Get("green_y")!)];
+                    BlueRaw = [new Fraction(vals.Get("blue_x")!), new Fraction(vals.Get("blue_y")!)];
+                    WhitepointRaw = [new Fraction(vals.Get("white_point_x")!), new Fraction(vals.Get("white_point_y")!)];
+                    LuminanceRangeRaw = [new Fraction(vals.Get("min_luminance")!), new Fraction(vals.Get("max_luminance")!)];
+
+                    Red = [RedRaw[0].Float, RedRaw[1].Float];
+                    Green = [GreenRaw[0].Float, GreenRaw[1].Float];
+                    Blue = [BlueRaw[0].Float, BlueRaw[1].Float];
+                    Whitepoint = [WhitepointRaw[0].Float, WhitepointRaw[1].Float];
+                    MinLuminance = LuminanceRangeRaw[0].Float;
+                    MaxLuminance = LuminanceRangeRaw[1].Float;
+
+                    Logger.Log($"[Mastering display data primaries] Red: {Red[0]:0.0##},{Red[1]:0.0##} - Green: {Green[0]:0.0##},{Green[1]:0.0##} - Blue: {Blue[0]:0.0##},{Blue[1]:0.0##}", Logger.Level.Verbose);
+                    Logger.Log($"[Mastering display data luminance] Whitepoint: {Whitepoint[0]:0.0####},{Whitepoint[1]:0.0####} - Min Luminance: {MinLuminance:0.####} - Max Luminance: {MaxLuminance:0.#}", Logger.Level.Verbose);
+
+                    // Detect primaries with an allowed error of 0.01
+                    Primaries = ColorPrimariesReference.FirstOrDefault(r => r.Value.R[0].EqualsRoughly(Red[0]) && r.Value.R[1].EqualsRoughly(Red[1]) && r.Value.G[0].EqualsRoughly(Green[0]) && r.Value.G[1].EqualsRoughly(Green[1]) && r.Value.B[0].EqualsRoughly(Blue[0]) && r.Value.B[1].EqualsRoughly(Blue[1])).Key;
+                    // Detect whitepoint with an allowed error of 0.001
+                    WhitePoint = WhitePointReference.FirstOrDefault(r => r.Value[0].EqualsRoughly(Whitepoint[0]) && r.Value[1].EqualsRoughly(Whitepoint[1])).Key;
+
+                    Logger.Log($"[Mastering display data analysis] Primaries: {Primaries} - Whitepoint: {WhitePoint}", Logger.Level.Verbose);
                 }
 
-                if (lightDict != null)
+                if (contentLightDict != null)
                 {
-                    var lightValues = colorDict.ToObject<Dictionary<string, string>>();
-                    MinLuminance = new Fraction(lightValues.Get("min_luminance"));
-                    MaxLuminance = new Fraction(lightValues.Get("max_luminance"));
+                    var vals = contentLightDict.ToObject<Dictionary<string, string>>();
+                    MaxCll = new Fraction(vals.Get("max_content", "1")!).Float.RoundToInt();
+                    MaxFall = new Fraction(vals.Get("max_average", "1")!).Float.RoundToInt();
+
+                    Logger.Log($"[Content light levels] MaxCLL: {MaxCll}, MaxFALL: {MaxFall}", Logger.Level.Verbose);
                 }
-
-                if (colorDict == null && lightDict == null)
-                    return;
-
-                Logger.Log($"Stream color data: Red {RedX} {RedY}, Green {GreenX} {GreenY}, Blue {BlueX} {BlueY}, White {WhiteX} {WhiteY}, Min Lum {MinLuminance}, Max Lum {MaxLuminance}", Logger.Level.Verbose);
             }
         }
     }

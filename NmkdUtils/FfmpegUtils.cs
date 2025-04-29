@@ -1,39 +1,58 @@
-﻿
-
-using System.Globalization;
+﻿using System.Globalization;
+using Newtonsoft.Json.Linq;
 using NmkdUtils.Media;
 
 namespace NmkdUtils
 {
     public class FfmpegUtils
     {
+        public static int FfprobeCacheHits = 0;
+        public static int FfprobeCacheMisses = 0;
+        private static Dictionary<string, string> _ffprobeOutputCache = []; // Key = File hash, Value = Command output
 
-        public static Dictionary<string, string> FfprobeOutputCache = new(); // Key = File hash, Value = Command output
-
-        public static string GetFfprobeOutputCached(string path, string executable = "", string args = "-v error -print_format json -show_format -show_streams")
+        public static string GetFfprobeOutput(string path, string? executable = null, string args = "-v error -print_format json -show_format -show_streams", bool allowCaching = true)
         {
-            if(executable == "")
+            if (CodeUtils.Assert(!File.Exists(path), () => Logger.LogErr($"File not found: {executable}")))
+                return "";
+
+            executable ??= IoUtils.GetProgram("ffprobe");
+
+            string cacheKey = allowCaching ? new FileInfo(path).GetPseudoHash() + args : "";
+
+            if (allowCaching && _ffprobeOutputCache.ContainsKey(cacheKey))
             {
-                executable = Settings.FfprobePath;
+                FfprobeCacheHits++;
+                return _ffprobeOutputCache[cacheKey];
             }
 
-            string cacheKey = new FileInfo(path).GetPseudoHash() + args;
-
-            if (FfprobeOutputCache.ContainsKey(cacheKey))
-            {
-                Logger.Log($"Cached: {path}", Logger.Level.Verbose);
-                return FfprobeOutputCache[cacheKey];
-            }
-
+            FfprobeCacheMisses++;
             var cmdResult = OsUtils.RunCommandShell($"{executable} {args} {path.Wrap()}");
             Logger.Log($"Ffprobe ExitCode: {cmdResult.ExitCode} ({FormatUtils.Time(cmdResult.RunTime)})", Logger.Level.Verbose);
 
-            if (cmdResult.ExitCode == 0 && cmdResult.StdOut.IsNotEmpty() && cmdResult.StdOut.Remove("{").Remove("}").IsNotEmpty())
+            if (allowCaching && cmdResult.ExitCode == 0 && cmdResult.StdOut.Remove(['{', '}']).IsNotEmpty())
             {
-                FfprobeOutputCache[cacheKey] = cmdResult.StdOut;
+                _ffprobeOutputCache[cacheKey] = cmdResult.StdOut;
             }
 
             return cmdResult.StdOut;
+        }
+
+        public static JObject GetFfprobeJson(string path, string? executable = null, string args = "-v error -show_format -show_streams", bool allowCaching = true)
+        {
+            string json = GetFfprobeOutput(path, executable, $"-print_format json {args}", allowCaching);
+
+            if (json.IsEmpty())
+                return [];
+
+            try
+            {
+                return JObject.Parse(json);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Failed to parse ffprobe output");
+                return [];
+            }
         }
 
         /// <summary> Gets the decoded bitrate of a <paramref name="file"/> (or specific stream if <paramref name="streamIndex"/> is used) by demuxing it to NUL </summary>
@@ -49,7 +68,7 @@ namespace NmkdUtils
             var result = OsUtils.Run(new OsUtils.RunConfig(cmd));
             int kbps = result.Output.Split("bitrate=").Last().Split('.').First().GetInt();
 
-            if(kbps <= 0)
+            if (kbps <= 0)
             {
                 Logger.LogErr($"Failed to get bitrate from stream {streamIndex} of '{Path.GetFileName(file)}' (Got {0})");
             }
@@ -59,7 +78,7 @@ namespace NmkdUtils
 
         public static TimeSpan GetTimespanFromFfprobe(Dictionary<string, string> tags, int fallbackMs = 0)
         {
-            if(tags == null)
+            if (tags == null)
                 return TimeSpan.FromMilliseconds(fallbackMs);
 
             string d = tags.Where(tags => tags.Key.StartsWith("DURATION")).Select(tags => tags.Value).FirstOrDefault();
@@ -80,6 +99,18 @@ namespace NmkdUtils
                 return fallback;
 
             return duration;
+        }
+
+        /// <summary>
+        /// Escapes a path for use in ffmpeg/ffprobe filters. <paramref name="wrap"/> wraps it in double quotes.
+        /// </summary>
+        public static string EscapePath(string path, bool wrap = true)
+        {
+            if (path.IsEmpty())
+                return path;
+
+            path = path.Trim().Replace(@"\", @"/").Replace(":", @"\\:");
+            return wrap ? path.Wrap() : path;
         }
     }
 }
