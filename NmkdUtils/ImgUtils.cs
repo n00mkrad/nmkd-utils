@@ -1,15 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using SixLabors.ImageSharp;
-using HeyRed.ImageSharp.Heif.Formats.Heif;
-using HeyRed.ImageSharp.Heif.Formats.Avif;
-using SixLabors.ImageSharp.Formats;
+﻿using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using HeyRed.ImageSharp.Heif;
+using SixLabors.ImageSharp.Processing;
 
 namespace NmkdUtils
 {
@@ -40,6 +33,18 @@ namespace NmkdUtils
             }
 
             return "";
+        }
+
+        public static string ResizeImageToBase64Jpeg(string imagePath, int targetWidth = 768, int? targetHeight = null, int jpegQual = 85)
+        {
+            targetHeight ??= targetWidth; // If target height is not specified, use target width
+            using Image image = Image.Load(imagePath);
+            // Resize (letterbox/pillarbox to black) using ResizeOptions with ResizeMode.Pad automatically preserves aspect ratio and pads the image to fill
+            image.Mutate(x => x.Resize(new ResizeOptions { Mode = ResizeMode.Pad, Size = new Size(targetWidth, (int)targetHeight), PadColor = Color.Black }));
+            // Save to MemoryStream as JPEG and get Base64
+            using var ms = new MemoryStream();
+            image.SaveAsJpeg(ms, new JpegEncoder { Quality = jpegQual });
+            return Convert.ToBase64String(ms.ToArray());
         }
     }
 }
