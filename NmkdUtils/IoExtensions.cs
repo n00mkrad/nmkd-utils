@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿
 
 namespace NmkdUtils
 {
@@ -37,16 +33,17 @@ namespace NmkdUtils
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Logger.Log(ex, $"Failed to get size of directory {directory.FullName}");
-            }
+            catch { }
+            //catch (Exception ex)
+            //{
+            //    Logger.Log(ex, $"Failed to get size of directory {directory.FullName}");
+            //}
 
             return size;
         }
 
         /// <summary> Gets the combined size of all files in <paramref name="directory"/> in bytes, multithreaded. If <paramref name="threads"/> is <=0, the amount of CPU threads will be used </summary>
-        public static long GetSize(this DirectoryInfo directory, int threads)
+        public static long GetSize(this DirectoryInfo directory, int threads = -1)
         {
             if (threads <= 0)
             {
@@ -65,8 +62,8 @@ namespace NmkdUtils
                 }
                 catch (Exception ex)
                 {
-                    // Logger.LogWrn($"{directory.FullName}: {ex.Message}");
-                    files = new FileInfo[0]; // Continue with no files if access is denied
+                    Logger.LogWrn($"{directory.FullName}: {ex.Message}");
+                    files = []; // Continue with no files if access is denied
                 }
 
                 Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = threads }, file =>
@@ -79,7 +76,7 @@ namespace NmkdUtils
                             Interlocked.Add(ref totalSize, file.Length);
                         }
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         // Logger.LogWrn($"{file.FullName}: {ex.Message}");
                         // Skip inaccessible file and continue
@@ -92,10 +89,10 @@ namespace NmkdUtils
                 {
                     subdirectories = directory.GetDirectories();
                 }
-                catch (Exception ex)
+                catch
                 {
                     // Logger.LogWrn($"{directory.FullName}: {ex.Message}");
-                    subdirectories = new DirectoryInfo[0]; // Continue with no subdirectories if access is denied
+                    subdirectories = []; // Continue with no subdirectories if access is denied
                 }
 
                 Parallel.ForEach(subdirectories, new ParallelOptions { MaxDegreeOfParallelism = threads }, subdir =>
@@ -109,7 +106,7 @@ namespace NmkdUtils
                             Interlocked.Add(ref totalSize, subdirSize);
                         }
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         // Logger.LogWrn($"{subdir.FullName}: {ex.Message}");
                         // Skip inaccessible subdirectory and continue
