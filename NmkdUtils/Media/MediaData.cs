@@ -69,6 +69,34 @@ namespace NmkdUtils.Media
             }
         }
 
+        public class ColorInfo // https://trac.ffmpeg.org/wiki/colorspace#color_primaries
+        {
+            public string Space { get; set; } = "";
+            public string Transfer { get; set; } = "";
+            public string Primaries { get; set; } = "";
+            public bool FullRange { get; set; } = false;
+            public string Range => FullRange ? "pc" : "tv";
+            public bool IsHdr { get; set; } = false;
+
+            public ColorInfo() { }
+            public ColorInfo(string colSpace, string colTransfer, string primaries, bool fullRange = false, bool allowConversion = true)
+            {
+                Space = colSpace.IsEmpty() ? "bt709" : colSpace;
+                Transfer = colTransfer.IsEmpty() ? "bt709" : colTransfer;
+                Primaries = primaries.IsEmpty() ? "bt709" : primaries;
+                FullRange = fullRange;
+                IsHdr = Primaries == "bt2020" && (Transfer == "smpte2084" || Transfer == "arib-std-b67");
+
+                if (!allowConversion)
+                    return;
+
+                Space = Space.Replace("bt470bg", "bt470").Replace("bt470m", "bt470"); // Parameter seemingly only accepts br470 but ffprobe readout can be bt470m or bt470bg
+                Transfer = Transfer.Replace("bt470m", "gamma22").Replace("bt470bg", "gamma28"); // Parameter accepts gamma22/gamma28, but bt470m/bt470bg are used in the ffprobe output
+            }
+
+            public string FfmpegArgs => $" -colorspace {Space} -color_primaries {Primaries} -color_trc {Transfer} -color_range {Range}";
+        }
+
         public class ColorMasteringData
         {
             public static readonly Dictionary<Primaries, (float[] R, float[] G, float[] B)> ColorPrimariesReference = new()

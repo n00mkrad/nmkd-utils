@@ -1,4 +1,6 @@
 ﻿using NDesk.Options;
+using static NmkdUtils.CodeUtils;
+using static NmkdUtils.Media.StreamFiltering;
 
 namespace NmkdUtils.Extensions
 {
@@ -13,6 +15,7 @@ namespace NmkdUtils.Extensions
             public bool AlwaysPrintHelp { get; set; } = false;
             public bool PrintLooseArgs { get; set; } = true;
             public bool PrintHelpIfNoArgs { get; set; } = true;
+            public List<string> InvalidArgs { get; set; } = [];
 
             public Options(string basicUsage = "", OptionSet? options = null, string additionalHelp = "", bool addHelpArg = true, bool alwaysPrintHelp = false, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
             {
@@ -36,9 +39,9 @@ namespace NmkdUtils.Extensions
             public string FilesWildcard { get; set; } = "*";
             public SortMode Sort { get; set; } = SortMode.Name;
 
-            public List<string> GetValidFiles ()
+            public List<string> GetValidFiles()
             {
-                Paths = Paths.Select(p => p.TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
+                Paths = Paths.Select(p => p.Replace("\"", "").Trim().TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
                 var validDirs = Paths.Where(dirPath => IoUtils.ValidatePath(dirPath, IoUtils.PathType.Dir)).Select(Path.GetFullPath).ToList(); // Collect valid directories from input paths
                 validDirs.ForEach(d => Paths.AddRange(Directory.GetFiles(d, FilesWildcard, AllowRecurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))); // Add files from directories to the list of paths
                 var existMode = AllowEmptyFiles ? IoUtils.ExistMode.MustExist : IoUtils.ExistMode.NotEmpty;
@@ -55,36 +58,89 @@ namespace NmkdUtils.Extensions
 
                 return validFiles.ToList();
             }
+
+            public List<FileInfo> GetValidFileInfos() => GetValidFiles().Select(f => new FileInfo(f)).ToList();
         }
 
-        public static PathConfig AddPathConfig (this Options opts, PathConfig.SortMode? sort = null, bool? allowEmptyFiles = null)
+        public static PathConfig AddPathConfig(this Options opts, PathConfig.SortMode? sort = null, bool? allowEmptyFiles = null)
         {
+            opts.AddHelpArgIfNotPresent();
             var pathCfg = new PathConfig();
-            opts.OptionsSet.Add("p_r|recurse", $"Allow recursive search for files. Only relevant when passing directory paths.", v => pathCfg.AllowRecurse = v != null);
-            opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern. Only relevant when passing directory paths.", v => pathCfg.FilesWildcard = v.Trim());
-            opts.OptionsSet.Add("<>", "File/directory path(s)", pathCfg.Paths.Add);
-            if(sort.HasValue) pathCfg.Sort = sort.Value;
+
+            void AddPathWithBasicValidation (string path)
+            {
+                if(Assert(path.StartsWith('-'), () => opts.InvalidArgs.Add(path))) // Assume this is an argument; paths starting with a hyphen must be wrapped in quotes
+                    return;
+
+                // If path has no slashes, it must be relative, which we can check for in advance
+                if (!path.Replace('/', '\\').Contains('\\'))
+                {
+                    if (Assert(!File.Exists(path) || !Directory.Exists(path), () => opts.InvalidArgs.Add(path)))
+                        return;
+                }
+
+                pathCfg.Paths.Add(path);
+            }
+
+            opts.OptionsSet.Add($"title__{nameof(PathConfig)}", $"Path Handling:", v => { });
+            opts.OptionsSet.Add("p_r|recurse", $"Allow recursive search for files - Only relevant when passing directory paths", v => pathCfg.AllowRecurse = v != null);
+            opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern - Only relevant when passing directory paths", v => pathCfg.FilesWildcard = v.Trim());
+            opts.OptionsSet.Add("<>", "File/directory paths - Wrap paths starting with a hyphen or containing spaces in quotes!", v => AddPathWithBasicValidation(v.Trim().TrimEnd('\\')));
+            if (sort.HasValue) pathCfg.Sort = sort.Value;
             if (allowEmptyFiles.HasValue) pathCfg.AllowEmptyFiles = allowEmptyFiles.Value;
             return pathCfg;
         }
 
-        public static void PromptForPathConfigOptions (ref PathConfig pathCfg)
+        public static void PromptForPathConfigOptions(ref PathConfig pathCfg)
         {
             if (pathCfg.Paths.All(File.Exists)) // All paths are files, so directory search options are not relevant
                 return;
 
             bool recurse = pathCfg.AllowRecurse;
             var filesWildcard = pathCfg.FilesWildcard;
-            CliUtils.ReadLineBool("Allow recursive search for files (Y/N):", (b) => recurse = b);
+            CliUtils.ReadBool("Allow recursive search for files", (b) => recurse = b);
             CliUtils.ReadLine("Filter files using a wildcard pattern (Default = All):", (s) => filesWildcard = s.Trim());
             pathCfg.AllowRecurse = recurse;
             pathCfg.FilesWildcard = filesWildcard;
         }
 
-        public static void PrintHelp(this Options opts)
+        public static void PrintHelp(this Options opts, bool colors = true, bool toFile = false)
         {
-            Logger.Log(opts.GetHelpStr());
+            string s = opts.GetHelpStr();
+
+            if (!colors)
+            {
+                Logger.Log(s, toFile: toFile);
+                return;
+            }
+
+            var lines = s.SplitIntoLines();
+
+            Logger.Log(lines[0], toFile: toFile); // "Usage:" line
+            Logger.Log(lines[1], customColor: ConsoleColor.Green, toFile: toFile); // Basic Usage description
+
+            // Merge consecutive argument lines into single strings to reduce log calls; color others (title lines, etc.) differently
+            for (int i = 2; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(" : "))
+                {
+                    var line = lines[i];
+                    while (i + 1 < lines.Length && lines[i + 1].Contains(" : "))
+                    {
+                        line += Environment.NewLine + lines[i + 1];
+                        i++;
+                    }
+                    Logger.Log(line, customColor: ConsoleColor.White, toFile: toFile);
+                }
+                else
+                {
+                    Logger.Log(lines[i], customColor: ConsoleColor.DarkGray, toFile: toFile);
+                }
+            }
+
         }
+
+        private const string TitlePfx = "-title__";
 
         public static string GetHelpStr(this Options opts, bool pad = true, bool linebreaks = false, bool newLines = false)
         {
@@ -118,6 +174,9 @@ namespace NmkdUtils.Extensions
 
                 foreach (var namesList in allNames)
                 {
+                    if (namesList[0].StartsWith(TitlePfx)) // Ignore title lines
+                        continue;
+
                     for (int i = 0; i < namesList.Count; i++)
                         colWidths[i] = Math.Max(colWidths[i], namesList[i].Length);
                 }
@@ -132,6 +191,7 @@ namespace NmkdUtils.Extensions
                     continue;
 
                 string namesStr;
+
                 if (pad)
                 {
                     var padded = new List<string>();
@@ -147,7 +207,13 @@ namespace NmkdUtils.Extensions
                     namesStr = names.Join(" ");
                 }
 
-                string v = opt.OptionValueType == NDesk.Options.OptionValueType.None ? "        " : " <VALUE>";
+                if (namesStr.StartsWith(TitlePfx))
+                {
+                    lines.Add(opt.Description);
+                    continue;
+                }
+
+                string v = opt.OptionValueType == OptionValueType.None ? "        " : " <VALUE>";
                 string desc = opt.Description.IsEmpty() ? "?" : opt.Description;
                 lines.Add($"{namesStr}{v} : {desc}");
 
@@ -188,13 +254,13 @@ namespace NmkdUtils.Extensions
 
             if (!alreadyHasHelpArg)
             {
-                var helpItem = new NDesk.Options.OptionSet() { { "h|help", "Show help", v => opts.PrintHelp() } }.First();
+                var helpItem = new OptionSet() { { "h|help", "Show help", v => opts.PrintHelp() } }.First();
                 int insertIdx = hasLooseArgsEntry ? opts.OptionsSet.Count - 1 : opts.OptionsSet.Count;
                 opts.OptionsSet.Insert(insertIdx, helpItem);
             }
         }
 
-        public static bool TryParseOptions(this Options opts, IEnumerable<string> args)
+        public static bool TryParseOptions(this Options opts, IEnumerable<string> args, bool returnFalseIfShowHelp = true)
         {
             try
             {
@@ -209,19 +275,29 @@ namespace NmkdUtils.Extensions
 
                 if (hasAnyArgs)
                 {
-                    opts.OptionsSet.Parse(args);
+                    var parsed = opts.OptionsSet.Parse(args);
                 }
 
                 if (opts.AlwaysPrintHelp || (!hasAnyArgs && opts.PrintHelpIfNoArgs))
                 {
                     opts.PrintHelp();
+
+                    if (returnFalseIfShowHelp)
+                        return false;
+                }
+
+                if (opts.InvalidArgs.Any())
+                {
+                    Logger.LogErr($"Invalid arguments: {opts.InvalidArgs.Join(" ")}");
+                    return false;
                 }
 
                 return hasAnyArgs;
             }
             catch (Exception ex)
             {
-                Logger.Log(ex, "Failed to parse options!");
+                Logger.LogErr($"Failed to parse CLI options! ({ex.Message})");
+                Logger.Log(ex.StackTrace, level: Logger.Level.Error, print: false);
                 return false;
             }
         }

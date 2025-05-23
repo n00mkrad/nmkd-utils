@@ -46,6 +46,29 @@ namespace NmkdUtils
             return (int)Math.Round((double)number / x) * x;
         }
 
+        /// <summary>
+        /// Rounds <paramref name="value"/> to the specified <paramref name="mult"/>. If <paramref name="roundUp"/> is true, rounds up, if false, rounds down. If null, rounds to the nearest multiple.
+        /// </summary>
+        public static int RoundToMultiple(this int value, int mult = 2, bool? roundUp = null)
+        {
+            if (mult < 1)
+                throw new ArgumentOutOfRangeException(nameof(mult), "Multiple must be ≥ 1.");
+
+            if (value % mult == 0)
+                return value;
+
+            int remainder = Math.Abs(value) % mult;
+
+            if (roundUp == true)
+                return value >= 0 ? value + (mult - remainder) : value - remainder;
+
+            if (roundUp == false)
+                return value >= 0 ? value - remainder : value - (mult - remainder);
+
+            bool shouldRoundUp = remainder * 2 >= mult;
+            return shouldRoundUp ? (value >= 0 ? value + (mult - remainder) : value - remainder) : (value >= 0 ? value - remainder : value - (mult - remainder));
+        }
+
         public static double RatioTo(this int first, int second)
         {
             return (double)Math.Max(first, second) / Math.Min(first, second);

@@ -15,7 +15,7 @@ namespace NmkdUtils
                 if (sizeBytes == 0) return "0" + suf[0];
                 long bytes = Math.Abs(sizeBytes);
                 int place = Convert.ToInt32(Math.Floor(Math.Log(bytes, mult)));
-                double num = Math.Round(bytes / Math.Pow(mult, place), 1);
+                double num = Math.Round(bytes / Math.Pow(mult, place), 2);
                 string s = ($"{Math.Sign(sizeBytes) * num} {suf[place]}");
                 return noDecimals ? s.Split('.').First() : s;
             }
@@ -32,6 +32,11 @@ namespace NmkdUtils
         public static string Time(TimeSpan ts, bool forceDecimals = false, bool noDays = true)
         {
             return Time((long)ts.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
+        }
+
+        public static string Time(double milliseconds, bool forceDecimals = false, bool noDays = true)
+        {
+            return Time((long)milliseconds, forceDecimals: forceDecimals, noDays: noDays);
         }
 
         public static string Time(long milliseconds, bool forceDecimals = false, bool noDays = true)

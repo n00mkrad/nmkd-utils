@@ -3,10 +3,12 @@ namespace NmkdUtils
 {
     public static class ConfigMgr<T> where T : new()
     {
+        /// <summary> Config file path </summary>
         public static string CfgFile = "";
 
         private static T? _config = default;
 
+        /// <summary> Config object </summary>
         public static T Config
         {
             get
@@ -25,6 +27,7 @@ namespace NmkdUtils
             CfgFile = Path.Combine(PathUtils.ExeDir, "config.json");
         }
 
+        /// <summary> Reads the config from disk, if it does not exist, a new config object will be returned. </summary>
         public static void Read()
         {
             try
@@ -49,6 +52,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Writes the config to disk. </summary>
         public static void Write()
         {
             if (_config == null)

@@ -1,4 +1,6 @@
-﻿using static NmkdUtils.Media.MediaData;
+﻿using NmkdUtils.Extensions;
+using System.Net.Http.Headers;
+using static NmkdUtils.Media.MediaData;
 using static NmkdUtils.Media.StreamFiltering;
 
 namespace NmkdUtils.Media
@@ -55,7 +57,7 @@ namespace NmkdUtils.Media
                 streams = streams.Where(s => f.Types.Contains(s.Type));
             }
 
-            if(f.Codecs.HasItems())
+            if (f.Codecs.HasItems())
             {
                 streams = streams.Where(s => f.Codecs.Any(c => s.CodecFriendly.MatchesWildcard(c, orContains: true)));
             }
@@ -85,23 +87,35 @@ namespace NmkdUtils.Media
             return copy.Take(f.Amount).ToList(); // Limit amount and return
         }
 
-        public static StreamFilter AddStreamFilterArgs(NDesk.Options.OptionSet opts, int insertionIndex = 0)
+        public static StreamFilter AddStreamFilterArgs(ArgParseExtensions.Options opts, bool first = false)
         {
+            opts.AddHelpArgIfNotPresent();
             var f = new StreamFilter();
 
             var set = new NDesk.Options.OptionSet() {
+                { $"title__{nameof(StreamFilter)}", $"Media Stream Selection:", v => { } },
                 { "s_id|indexes=", "Stream index(es).", v => f.Indexes = v.SplitValues().Select(s => s.GetInt()).ToList() },
                 { "s_a|amount=", "Amount of streams to return; 0 means all, 1 is first, etc.", v => f.Amount = v.GetInt() },
-                { "s_ty|type=", $"Stream type(s) ({StringUtils.GetEnumNamesSnek(typeof(CodecType)).Join("/")})", v => f.Types = v.SplitValues().Select(t => t.GetEnum<CodecType>(flexible: true)).ToList() },
+                { "s_ty|type=", $"Stream type(s) ({StringUtils.GetEnumNamesSnek(typeof(CodecType)).Join("/")})", v => f.Types = v.SplitValues().Select(t => t.GetEnumCli<CodecType>()).ToList() },
                 { "s_c|codecs=", $"Stream codec(s) as wildcard patterns.", v => f.Codecs = v.SplitValues().ToList() },
                 { "s_t|titles=", "Stream title(s) as wildcard patterns. Case-insensitive unless prefixed with '_'", v => f.Titles = v.SplitValues().ToList() },
                 { "s_l|langs=", "Stream language(s) as ISO 639 codes or names", v => f.Langs = v.SplitValues().Select(LanguageUtils.GetLangByNameOrCode).ToList() },
                 { "s_i|invert", "Invert the filter to act as a blacklist instead of a whitelist", v => f.Invert = v != null }
             };
 
-            foreach (var opt in set.Reverse())
+            if (first)
             {
-                opts.Insert(insertionIndex, opt);
+                foreach (var opt in set.Reverse())
+                {
+                    opts.OptionsSet.Insert(0, opt);
+                }
+            }
+            else
+            {
+                foreach (var opt in set)
+                {
+                    opts.OptionsSet.Add(opt);
+                }
             }
 
             return f;
@@ -111,13 +125,16 @@ namespace NmkdUtils.Media
         {
             var f = new StreamFilter();
 
-            CliUtils.ReadLine("Specify stream index(es). Use negative numbers to invert the stream ID selection:", v => f.Indexes = v.SplitValues().Select(s => s.GetInt()).ToList());
+            string idxInput = CliUtils.ReadLine("Specify stream index(es). Use negative numbers to invert the stream ID selection. Use * to select all and skip additional prompts:");
+            if (idxInput == "*")
+                return f;
+            f.Indexes = idxInput.SplitValues().Select(s => s.GetInt()).ToList();
             CliUtils.ReadLine("Specify amount of streams to return (0 = All, 1 = First):", v => f.Amount = v.GetInt());
             CliUtils.ReadLine($"Specify stream type(s) ({StringUtils.GetEnumNamesSnek(typeof(CodecType)).Join("/")}):", v => f.Types = v.SplitValues().Select(t => t.GetEnum<CodecType>(flexible: true)).ToList());
             CliUtils.ReadLine("Specify stream codec(s) as wildcard patterns:", v => f.Codecs = v.SplitValues().ToList());
             CliUtils.ReadLine("Specify stream title(s) as wildcard patterns (case-insensitive unless prefixed with '_'):", v => f.Titles = v.SplitValues().ToList());
             CliUtils.ReadLine("Specify stream language(s) as ISO 639 codes or names:", v => f.Langs = v.SplitValues().Select(LanguageUtils.GetLangByNameOrCode).ToList());
-            CliUtils.ReadLineBool("Invert the filter to act as a blacklist instead of a whitelist (Y/N):", v => f.Invert = v);
+            CliUtils.ReadBool("Invert the filter to act as a blacklist instead of a whitelist:", v => f.Invert = v);
 
             return f;
         }
@@ -125,10 +142,10 @@ namespace NmkdUtils.Media
         public const string StreamNameVars = "[S_ID] = ID, [S_CODEC] = Codec, [S_TITLE] = Title, [S_LANG] = Language, [S_LANG2] = Language 2-char code, [S_LANG3] = Language 3-char code";
 
         // TODO: Implement somewhere lol
-        public static string FillStreamVars (string text, Stream stream)
+        public static string FillStreamVars(string text, Stream stream)
         {
             var lang = stream.LanguageParsed;
-            
+
             return text
                 .Replace("[S_ID]", stream.Index.ToString())
                 .Replace("[S_LANG3]", lang == null ? "und" : lang.Name)

@@ -6,8 +6,8 @@ namespace NmkdUtils
 {
     public class CodeUtils
     {
-        /// <summary> Checks the failure condition <paramref name="failureCondition"/>. Executes the action <paramref name="failureAction"/> and returns true if the condition is met. </summary>
-        public static bool Assert(Func<bool> failureCondition, Action failureAction = null)
+        /// <summary> Returns <paramref name="failureCondition"/>. Can optionally run a <paramref name="failureAction"/> or a <paramref name="successAction"/>. </summary>
+        public static bool Assert(Func<bool> failureCondition, Action? failureAction = null, Action? successAction = null)
         {
             if (failureCondition())
             {
@@ -15,14 +15,14 @@ namespace NmkdUtils
                 return true;
             }
 
+            successAction?.Invoke();
             return false;
         }
 
-        /// <inheritdoc cref="Assert(Func{bool}, Action)"/>
-        public static bool Assert(bool failureCondition, Action failureAction = null)
-        {
-            return Assert(() => failureCondition, failureAction);
-        }
+        /// <inheritdoc cref="Assert(Func{bool}, Action, Action)"/>
+        public static bool Assert(bool failureCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => failureCondition, failureAction, successAction);
+        public static bool Validate(Func<bool> requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => requiredCondition() == false, failureAction, successAction);
+        public static bool Validate(bool requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => !requiredCondition, failureAction, successAction);
 
         // Function to set a variable via ref only if a given condition is met
         public static void SetIf<T>(ref T variable, T value, Func<bool> condition)
@@ -35,6 +35,53 @@ namespace NmkdUtils
         {
             if (value != null)
                 variable = (T)value;
+        }
+
+        /// <summary>
+        /// Try running an action, catch any exceptions, optionally log them. <paramref name="logEx"/> true = Always log exceptions, false = Never log exceptions, null = Log if no catchAction is provided.
+        /// </summary>
+        public static void Try(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null)
+        {
+            if (tryAction == null)
+                return;
+
+            try
+            {
+                tryAction();
+            }
+            catch (Exception ex)
+            {
+                if (logEx == true || (logEx == null && catchAction is null))
+                {
+                    Logger.Log(ex);
+                }
+
+                catchAction?.Invoke(ex);
+            }
+        }
+
+        /// <summary> <inheritdoc cref="Try(Action, Action{Exception}, bool?)"/> </summary>/>
+        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null)
+        {
+            if (tryAction == null)
+                return default;
+
+            try
+            {
+                return tryAction();
+            }
+            catch (Exception ex)
+            {
+                if (logEx == true || (logEx == null && catchAction is null))
+                {
+                    Logger.Log(ex);
+                }
+
+                if (catchAction != null)
+                    return catchAction(ex);
+            }
+
+            return default;
         }
 
         /// <summary>

@@ -193,7 +193,7 @@ namespace NmkdUtils
                 {
                     throw; // Rethrow the exception if not ignoring them
                 }
-                Logger.LogConditional($"Failed to delete {path}: {ex.Message}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
+                Logger.LogConditional($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
             }
 
             Logger.Log((dryRun ? $"Would have deleted {path}" : $"Deleted {path}"), Logger.Level.Verbose);
@@ -217,7 +217,7 @@ namespace NmkdUtils
                     {
                         throw;
                     }
-                    Logger.Log($"Failed to delete {file}: {ex.Message}", Logger.Level.Warning);
+                    Logger.Log($"Failed to delete {file}: {ex.Message.Remove($"'{file}' ")}", Logger.Level.Warning);
                 }
             }
 
@@ -239,7 +239,7 @@ namespace NmkdUtils
                     {
                         throw;
                     }
-                    Logger.LogConditional($"Failed to delete {path}: {ex.Message}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
+                    Logger.LogConditional($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
                 }
             }
         }
@@ -380,6 +380,45 @@ namespace NmkdUtils
             }
 
             return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
+        }
+
+        public static long GetDirSize(string path, bool recursive = true, IEnumerable<string>? patterns = null)
+        {
+            IEnumerable<string> files = Directory.EnumerateFiles(path, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+            files = patterns == null ? files : files.Where(f => patterns.Any(pattern => f.MatchesWildcard(pattern)));
+
+            long totalSize = 0;
+            foreach (string file in files)
+            {
+                try
+                {
+                    totalSize += new FileInfo(file).Length;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Skip files we can't read, no need to log this
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(ex, $"Error getting size of file '{file}'");
+                }
+            }
+
+            return totalSize;
+        }
+
+
+        public static long? GetPathSize(string path, bool recursive = true)
+        {
+            try
+            {
+                bool isFile = File.Exists(path);
+                return isFile ? new FileInfo(path).Length : GetDirSize(path, recursive);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary> Free disk space on the drive of <paramref name="path"/>. If it fails (e.g. invalid path passed), <paramref name="fallback"/> is returned instead. </summary>

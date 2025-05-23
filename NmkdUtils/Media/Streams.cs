@@ -19,6 +19,7 @@ namespace NmkdUtils.Media
         public Dictionary<string, string> Tags { get; set; }
         public List<Dictionary<string, string>> SideData { get; set; }
         [JsonIgnore] public TimeSpan Duration => Values.Get("duration", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : FfmpegUtils.GetTimespanFromFfprobe(Tags);
+        [JsonIgnore] public TimeSpan StartTime => Values.Get("start_time", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : new TimeSpan();
         [JsonIgnore] public int KbpsDemuxed { get; set; } = 0;
         [JsonIgnore] public string Title => Tags.GetStr("title");
         [JsonIgnore] public int Kbps => (Values.GetStr("bit_rate").IsNotEmpty() ? Values.Get("bit_rate").GetInt() : Tags.Get("BPS").GetInt()) / 1000;
@@ -67,10 +68,11 @@ namespace NmkdUtils.Media
 
         public string Print(MediaObject? parentMedia = null, bool padCodec = false)
         {
+            bool validParentMedia = parentMedia != null && parentMedia.Streams.Count > 0;
             int maxTitleChars = 120; // Max chars of a stream/format title to display, longer gets truncated
-            int streamTypePad = parentMedia == null ? 0 : parentMedia.Streams.Max(s => s.Type.ToString().Length);
+            int streamTypePad = validParentMedia ? parentMedia.Streams.Max(s => s.Type.ToString().Length) : 0;
             string streamType = Type.ToString().PadRight(streamTypePad);
-            int indexPad = parentMedia == null ? 1 : (parentMedia.Streams.Count - 1).ToString().Length; // Count -1 to account for zero-indexing
+            int indexPad = validParentMedia ? (parentMedia.Streams.Count - 1).ToString().Length : 1;
             string str = $"[{Index.ToString().PadLeft(indexPad)}] {streamType}:";
             var lang = LanguageUtils.GetLangByCode(Language);
 
@@ -83,15 +85,15 @@ namespace NmkdUtils.Media
                 foreach (var stream in parentMedia.Streams)
                 {
                     string profile = "";
-                    if (stream is VideoStream) profile = ((VideoStream)stream).Profile;
-                    else if (stream is AudioStream) profile = ((AudioStream)stream).Profile;
+                    if (stream is VideoStream vStream) profile = vStream.Profile;
+                    else if (stream is AudioStream aStream) profile = aStream.Profile;
                     codecStrings.Add(Aliases.GetFriendlyCodecName(stream.Codec, profile));
                 }
 
                 return codecStrings.Max(s => s.Length);
             }
 
-            int codecPadding = padCodec && parentMedia != null ? GetCodecPadding() : 0;
+            int codecPadding = padCodec && validParentMedia ? GetCodecPadding() : 0;
 
             string GetBitrateSize(int kbps, TimeSpan? duration, bool parentheses = true)
             {
@@ -129,7 +131,7 @@ namespace NmkdUtils.Media
                 infos.Add(v.Sar.IsNotEmpty() && v.Sar != "1:1" ? $"{v.Width}x{v.Height} -> {v.ScaledRes.ToStr()}" : $"{v.Width}x{v.Height}");
                 infos.Add(GetBitrateStr(v));
                 infos.Add($"{v.PixFmt.Up()} ({FormatUtils.Media.BitDepthFromPixFmt(v.PixFmt)}-bit)");
-                infos.Add(v.Hdr ? "HDR" : "");
+                infos.Add(v.Color.IsHdr ? "HDR" : "");
                 infos.Add(v.DoviProfile > 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
                 infos.Add(v.Hdr10Plus ? $"HDR10+" : "");
                 // infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS{(v.AvgFps.Float.EqualsRoughly(v.Fps.Float, 4.0f) ? "" : $" (est. {v.AvgFps.Float.ToString("0.########")})")}");
@@ -170,8 +172,7 @@ namespace NmkdUtils.Media
             else if (Type == CodecType.Attachment || videoIsAttachment)
             {
                 var at = new AttachmentStream(this);
-                int filenamePad = parentMedia == null ? 0 : parentMedia.Streams.Where(s => s.Type == CodecType.Attachment).Max(s => ((AttachmentStream)s).Filename.Length);
-                infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename.PadRight(filenamePad)} ({at.MimeType})");
+                infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename} ({at.MimeType})");
             }
 
             return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
@@ -182,16 +183,11 @@ namespace NmkdUtils.Media
     {
         public FrameData? FrameData { get; set; } = null;
         public ColorMasteringData? ColorData { get; set; } = null;
+        public ColorInfo? Color { get; set; } = null;
         [JsonIgnore] public int Width => Values.Get("width", "").GetInt();
         [JsonIgnore] public int Height => Values.Get("height", "").GetInt();
         [JsonIgnore] public int ResSum => Width + Height;
         [JsonIgnore] public string PixFmt => Values.Get("pix_fmt");
-        [JsonIgnore] public bool Hdr => ColorTransfer == "smpte2084" && ColorPrimaries == "bt2020";
-        [JsonIgnore] public string ColorRange => Values.Get("color_range", "tv"); // Assume Limited Range (tv) if not found
-        [JsonIgnore] public string ColorSpace => Values.Get("color_space", "bt709"); // Assume bt.709 if not found
-        [JsonIgnore] public string ColorTransfer => Values.Get("color_transfer", "bt709"); // Assume bt.709 if not found
-        [JsonIgnore] public string ColorPrimaries => Values.Get("color_primaries", "bt709"); // Assume bt.709 if not found
-        [JsonIgnore] public bool LimitedRange => ColorRange == "tv";
         [JsonIgnore] public string Sar => Values.Get("sample_aspect_ratio");
         [JsonIgnore] public string Dar => Values.Get("display_aspect_ratio");
         [JsonIgnore] public Size ScaledRes => GetScaledRes();
@@ -203,7 +199,11 @@ namespace NmkdUtils.Media
         [JsonIgnore] public int Rotation => SideData?.FirstOrDefault(x => x.ContainsKey("rotation")).Get("rotation", "0").GetInt() ?? 0;
         [JsonIgnore] public bool Hdr10Plus => FrameData?.SideData?.Any(e => $"{e["side_data_type"]}".Contains("HDR10+")) ?? false;
 
-        public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData? cd = null) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed; }
+        public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData? cd = null)
+        {
+            Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed;
+            Color = new ColorInfo(Values.Get("color_space"), Values.Get("color_transfer"), Values.Get("color_primaries"), Values.Get("color_range", "tv") != "tv");
+        }
 
         // Scale using SAR (Sample Aspect Ratio) for non-square pixels
         private Size GetScaledRes()

@@ -115,7 +115,7 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
+        public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null, Func<bool>? condition = null, bool? print = null, bool? toFile = null, ConsoleColor? customColor = null)
         {
             // Check if this is a Logger.Entry object since it should be enqueued, not turned into a string
             if (o is Entry entry)
@@ -140,6 +140,7 @@ namespace NmkdUtils
                 var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout, ReplaceWildcard = replaceWildcard };
                 SetIfNotNull(ref logEntry.Print, print);
                 SetIfNotNull(ref logEntry.WriteToFile, toFile);
+                SetIfNotNull(ref logEntry.CustomColor, customColor);
                 _logQueue.Add(logEntry);
             }
         }

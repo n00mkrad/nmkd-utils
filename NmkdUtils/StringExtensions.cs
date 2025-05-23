@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -106,6 +107,18 @@ namespace NmkdUtils
             split1 = split[0];
             split2 = split[1];
             return true;
+        }
+
+        /// <summary>
+        /// Splits a string by <paramref name="separator"/> and returns only non-empty results. If <paramref name="input"/> is null, an empty array is returned by default (<paramref name="returnEmptyArrayInsteadOfNull"/>).<br/>
+        /// Mainly for CLI parsing of comma-separated values.
+        /// </summary>
+        public static IEnumerable<string> SplitValues(this string input, char separator = ',', bool returnEmptyArrayInsteadOfNull = true)
+        {
+            if (input is null)
+                return returnEmptyArrayInsteadOfNull ? new string[0] : null;
+
+            return input.Split(separator).Where(s => s.IsNotEmpty());
         }
 
         public static float GetFloat(this string? str)
@@ -258,7 +271,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces only the last occurence of a string in a string </summary>
-        public static string ReplaceLastOccurrence(this string s, string find, string replace)
+        public static string ReplaceLast(this string s, string find, string replace)
         {
             if (s.IsEmpty())
                 return s;
@@ -284,7 +297,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
-        public static string RemoveLineBreaks(this string s, string delimiter = " ")
+        public static string SquashLines(this string s, string delimiter = " ")
         {
             if (s.IsEmpty())
                 return s;
@@ -457,6 +470,93 @@ namespace NmkdUtils
         public static bool ContainsAny(this string s, IEnumerable<string> values, bool caseIns = false)
         {
             return values.Any(value => s.Contains(value, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        }
+
+        /// <summary> Uses TextCopy to copy a string to the clipboard. </summary>
+        public static void CopyToClipboard (this string s)
+        {
+            TextCopy.ClipboardService.SetText(s);
+        }
+
+        public static bool IsOneOf(this string s, bool caseSensitive, params object[] strings)
+        {
+            var strComp = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+            if(strings.Length == 0)
+                return false;
+
+            if (strings.Length == 1 && strings[0] is IEnumerable<string> col)
+                return col.Any(v => s.Equals(v, strComp));
+
+            return strings.Any(v => s.Equals(v.ToString(), strComp));
+        }
+
+        public static bool IsOneOf(this string s, params object[] strings) => IsOneOf(s, caseSensitive: true, strings);
+
+        public static string DecodeUnicodeEscapes(string input)
+        {
+            // Finds every “\u” followed by exactly four hex digits
+            return Regex.Replace(input, @"\\u([0-9A-Fa-f]{4})", m =>
+            {
+                // parse the hex value, convert to its char, and return
+                var code = int.Parse(m.Groups[1].Value, NumberStyles.HexNumber);
+                return ((char)code).ToString();
+            });
+        }
+
+        // Matches Unicode words and allows internal hyphens or apostrophes (e.g., "co-founder", "can't").
+        private static readonly Regex _wordsRegex = new(@"\b\p{L}+(?:[\p{Pd}']\p{L}+)*\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex _wordsNumbersRegex = new(@"\b\p{L}+(?:[\p{Pd}']\p{L}+)*\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary> Returns the number of words in <paramref name="input"/>. A "word" is any contiguous run of Unicode letters, optionally containing embedded hyphens or apostrophes. </summary>
+        public static int GetWordCount(this string? input, bool alsoMatchNumbers = true) => input.GetWords(alsoMatchNumbers).Length;
+
+        /// <summary> Gets all words in <paramref name="input"/>. A "word" is any contiguous run of Unicode letters, optionally containing embedded hyphens or apostrophes. </summary>
+        public static string[] GetWords(this string? input, bool alsoMatchNumbers = true)
+        {
+            if (input.IsEmpty())
+                return [];
+
+            var regex = alsoMatchNumbers ? _wordsNumbersRegex : _wordsRegex;
+            var matches = regex.Matches(input);
+            var words = new string[matches.Count];
+
+            for (int i = 0; i < matches.Count; i++)
+            {
+                words[i] = matches[i].Value;
+            }
+
+            return words;
+        }
+
+        /// <summary> Checks if a string consists mostly of numbers, based on <paramref name="threshold"/> (0-1). </summary>
+        public static bool IsMostlyNumbers(this string s, float threshold = 0.8f)
+        {
+            s = s.Replace(".", "").Replace(" ", "");
+            int length = s.Length;
+            int digitCount = s.Count(char.IsDigit);
+            float digitQuota = (float)digitCount / length;
+            return digitQuota > threshold;
+        }
+
+        /// <summary> Repeats a string <paramref name="count"/> times. <br/> If <paramref name="atLeastOne"/> is true, a count of less than 1 will return the string once instead of an empty string. </summary>
+        public static string RepeatStr(this string s, int count, bool atLeastOne = false)
+        {
+            if (count <= 0 && !atLeastOne)
+                return s;
+
+            if (count <= 0)
+                return "";
+
+            return string.Concat(Enumerable.Repeat(s, count));
+        }
+
+        public static string ReplaceRegex(this string s, string pattern, string replacement = "")
+        {
+            if (s.IsEmpty() || pattern.IsEmpty())
+                return s;
+
+            return Regex.Replace(s, pattern, replacement);
         }
     }
 }
