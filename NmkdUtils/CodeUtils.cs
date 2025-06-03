@@ -38,30 +38,33 @@ namespace NmkdUtils
         }
 
         /// <summary>
-        /// Try running an action, catch any exceptions, optionally log them. <paramref name="logEx"/> true = Always log exceptions, false = Never log exceptions, null = Log if no catchAction is provided.
+        /// Try running an action, catch any exceptions, optionally log them. <paramref name="logEx"/> true = Always log exceptions, false = Never log exceptions, null = Log if no catchAction is provided. <br/>
+        /// Stack trace is not logged by default, but can be enabled with <paramref name="printTrace"/>. <br/>
         /// </summary>
-        public static void Try(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null)
+        public static bool Try(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null, string errNote = "", bool printTrace = false)
         {
             if (tryAction == null)
-                return;
+                return true;
 
             try
             {
                 tryAction();
+                return true;
             }
             catch (Exception ex)
             {
                 if (logEx == true || (logEx == null && catchAction is null))
                 {
-                    Logger.Log(ex);
+                    Logger.Log(ex, errNote, printTrace);
                 }
 
                 catchAction?.Invoke(ex);
+                return false;
             }
         }
 
         /// <summary> <inheritdoc cref="Try(Action, Action{Exception}, bool?)"/> </summary>/>
-        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null)
+        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool printTrace = false)
         {
             if (tryAction == null)
                 return default;
@@ -74,7 +77,7 @@ namespace NmkdUtils
             {
                 if (logEx == true || (logEx == null && catchAction is null))
                 {
-                    Logger.Log(ex);
+                    Logger.Log(ex, errNote, printTrace);
                 }
 
                 if (catchAction != null)
