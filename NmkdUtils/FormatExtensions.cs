@@ -19,5 +19,12 @@ namespace NmkdUtils
         {
             return new DateTimeOffset(dt.ToUniversalTime()).ToUnixTimeMilliseconds();
         }
+
+        public static string AsPercentage(this float value, int decimals = 0)
+        {
+            string format = "0." + new string('0', decimals);
+            return (value * 100).ToString(format.Trim('.'));
+        }
+
     }
 }
