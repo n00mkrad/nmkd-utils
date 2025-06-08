@@ -8,11 +8,20 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
 
-
 namespace NmkdUtils
 {
     public class ImgUtils
     {
+        public static System.Drawing.Graphics GetGraphics (System.Drawing.Bitmap bmp, System.Drawing.Color? clearColor = null)
+        {
+            var gfx = System.Drawing.Graphics.FromImage(bmp);
+            gfx.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            gfx.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            gfx.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            gfx.Clear(clearColor ?? System.Drawing.Color.Black);
+            return gfx;
+        }
+
         public enum Format { Jpg, Png }
 
         /// <summary>
@@ -43,57 +52,78 @@ namespace NmkdUtils
             return "";
         }
 
-        public static Image LoadImage(string path)
+        /// <summary> Gets an image from a file path, base64 string, or native Image object (in this case it will only be passed through). </summary>
+        public static Image GetImage(object source)
         {
-            return Image.Load(path);
-        }
+            if(source is Image img)
+                return img;
 
-        public static List<Image> LoadImages(List<string> paths)
-        {
-            return paths.Select(Image.Load).ToList();
-        }
+            if (source is string str)
+            {
+                if(str.Length <= 1024 && File.Exists(str))
+                    return Image.Load(str);
 
-        /// <summary> Takes an image or image path, resizes it to the specified width and height, and returns it as a Base64-encoded JPEG string. Width/height is treated as a relative factor if <10.0f </summary>
-        public static Image ResizeImage(object imageOrPath, float targetWidth = 768, float? targetHeight = null, ResizeMode mode = ResizeMode.Stretch, bool invert = false, int blur = 0, Logger.Level logLvl = Logger.Level.Verbose)
+                if (StringUtils.IsBase64(str))
+                {
+                    using var ms = new MemoryStream(Convert.FromBase64String(str));
+                    return Image.Load(ms);
+                }
+
+                if (StringUtils.IsWebUrl(str))
+                {
+                    using Stream stream = new HttpClient().DownloadFileStream(str);
+                    return Image.Load(stream);
+                }
+            }
+
+            return null;
+        }
+        public static List<Image> LoadImages(List<string> sources) => sources.Select(GetImage).ToList();
+        public static List<Image> LoadImages(List<object> sources) => sources.Select(GetImage).ToList();
+
+        /// <summary>
+        /// Takes an image (or image path) and resizes it to the specified <paramref name="width"/> and <paramref name="height"/> (Defaults to width). <br/> 
+        /// Size values of 8.0 or less are treated as a multiplier relative to the original size (e.g. 0.5). Inversion can be applied with <paramref name="invert"/>, BoxBlur with <paramref name="blur"/> (0 = Off) <br/>
+        /// </summary>
+        public static Image ResizeImage(object imageOrPath, float width, float? height = null, ResizeMode mode = ResizeMode.Stretch, bool invert = false, int blur = 0, Logger.Level logLvl = Logger.Level.Verbose)
         {
-            targetHeight ??= targetWidth; // If target height is not specified, use target width
+            height ??= width; // If target height is not specified, use target width
             Image image = imageOrPath is Image img ? img : Image.Load(imageOrPath.ToString());
-
-            if (targetWidth < 10.0f)
-                targetWidth = image.Width * targetWidth;
-
-            if (targetHeight < 10.0f)
-                targetHeight = image.Height * (float)targetHeight;
-
-            int w = targetWidth.RoundToInt().RoundToNearestMultiple(2);
-            int h = ((float)targetHeight).RoundToInt().RoundToNearestMultiple(2);
-
-            image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black }));
 
             if (invert)
             {
                 image.Mutate(x => x.Invert());
             }
 
+            if (width <= 8.0f)
+                width = image.Width * width;
+
+            if (height <= 8.0f)
+                height = image.Height * (float)height;
+
+            int w = width.RoundToInt().RoundToNearestMultiple(2);
+            int h = ((float)height).RoundToInt().RoundToNearestMultiple(2);
+            image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black }));
+
             if (blur > 0)
             {
                 image.Mutate(x => x.BoxBlur(blur));
             }
 
-            Logger.Log($"Resized{(invert ? ", inverted" : "")}{(blur > 0 ? $", bluured ({blur})" : "")} image to {image.Width}x{image.Height}", logLvl);
+            Logger.Log($"Resized{(invert ? ", inverted" : "")}{(blur > 0 ? $", blurred ({blur})" : "")} image to {image.Width}x{image.Height}", logLvl);
             return image;
         }
 
         /// <summary>
-        /// Converts an image to a base64 string. PNG is used for <paramref name="quality"/> 100, JPEG for anything lower.
+        /// Converts an image to a base64 string. PNG is used for <paramref name="quality"/> 100, JPEG for anything lower. </br> 
         /// </summary>
-        public static string ImageToB64(Image image, int quality = 100, int pngCompression = 1)
+        public static string ImageToB64(Image image, int quality = 100, int pngCompression = 1, bool subsample = true)
         {
             using var ms = new MemoryStream();
 
             if (quality < 100)
             {
-                image.SaveAsJpeg(ms, new JpegEncoder { Quality = quality });
+                image.SaveAsJpeg(ms, new JpegEncoder { Quality = quality, ColorType = JpegEncodingColor.YCbCrRatio420 });
             }
             else
             {
@@ -133,7 +163,7 @@ namespace NmkdUtils
             {
                 for (int i = 0; i < images.Count; i++)
                 {
-                    var padImg = CreateTextImage($"Paragraph {i + 1}", images.Max(i => i.Width), (images.Average(i => i.Height) / 3d).RoundToInt(), "Arial", 32);
+                    var padImg = CreateTextImage($"Paragraph {i + 1}", images.Max(i => i.Width), (images.Average(i => i.Height) / 3d).RoundToInt(), "Arial", 44);
                     padImages.Add(padImg);
                 }
             }
@@ -167,12 +197,10 @@ namespace NmkdUtils
             {
                 for (int i = 0; i < images.Count; i++)
                 {
-                    var img = images[i];
-
                     // center this image
-                    int x = (canvasWidth - img.Width) / 2;
-                    ctx.DrawImage(img, new Point(x, y), 1f);
-                    y += img.Height;
+                    int x = (canvasWidth - images[i].Width) / 2;
+                    ctx.DrawImage(images[i], new Point(x, y), 1f);
+                    y += images[i].Height;
                 }
             });
 
