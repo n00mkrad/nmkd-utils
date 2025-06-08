@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace NmkdUtils
@@ -25,25 +26,21 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> <inheritdoc cref="Time(double, bool, bool)"/> </summary>
+        public static string Time(TimeSpan ts, bool forceDecimals = false, bool noDays = true) => Time(ts.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
+
+        /// <summary> <inheritdoc cref="Time(double, bool, bool)"/> </summary>
+        public static string Time(Stopwatch sw, bool forceDecimals = false, bool noDays = true) => Time(sw.Elapsed.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
+
         /// <summary>
-        /// Converts a TimeSpan <paramref name="ts"/> into a string. <paramref name="forceDecimals"/> forces decimals for seconds (e.g. 1.00 instead of 1).
-        /// <paramref name="noDays"/> will limit the output to hours, minutes and seconds in case it's more than 24 hours.
+        /// Converts a TimeSpan <paramref name="ts"/> into a string. <paramref name="forceDecimals"/> forces decimals for seconds (e.g. 1.00 instead of 1). <br/>
+        /// <paramref name="noDays"/> will limit the output to hours/minutes/seconds in case it's more than 24 hours.
         /// </summary>
-        public static string Time(TimeSpan ts, bool forceDecimals = false, bool noDays = true)
-        {
-            return Time((long)ts.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
-        }
-
         public static string Time(double milliseconds, bool forceDecimals = false, bool noDays = true)
-        {
-            return Time((long)milliseconds, forceDecimals: forceDecimals, noDays: noDays);
-        }
-
-        public static string Time(long milliseconds, bool forceDecimals = false, bool noDays = true)
         {
             if (milliseconds < 200)
             {
-                return $"{milliseconds}ms";
+                return $"{milliseconds:0.#}ms";
             }
             else if (milliseconds < 60000)
             {
@@ -86,14 +83,26 @@ namespace NmkdUtils
                 return kbps < 10000 ? $"{kbps:0}{s}kbps" : $"{kbps / 1000:0.0}{s}Mbps";
             }
 
-            public static int BitDepthFromPixFmt(string pixFmt)
+            /// <summary>
+            /// Gets bit depth from pixel format string. If the format is not recognized, it returns the <paramref name="fallback"/> value.
+            /// </summary>
+            public static int BitDepthFromPixFmt(string pixFmt, int fallback = 8)
             {
                 pixFmt = pixFmt.Low();
                 if (pixFmt.MatchesWildcard("yuv*p")) return 8;
+                if (pixFmt.MatchesWildcard("???24")) return 8; // e.g. rgb24, bgr24
                 if (pixFmt.MatchesWildcard("*p10?e")) return 10;
-                if (pixFmt.MatchesWildcard("*p12?e")) return 12;
-                if (pixFmt.MatchesWildcard("*p16?e")) return 16;
-                return 0;
+                if (pixFmt.MatchesWildcard("*12?e") || pixFmt.MatchesWildcard("*36?e")) return 12;
+                if (pixFmt.MatchesWildcard("*16?e") || pixFmt.MatchesWildcard("*48?e") || pixFmt.MatchesWildcard("*64?e")) return 16;
+                if (pixFmt.MatchesWildcard("*32?e") || pixFmt.MatchesWildcard("*96?e") || pixFmt.MatchesWildcard("*128?e")) return 32;
+                if (pixFmt.MatchesWildcard("*14?e")) return 14;
+                if (pixFmt.MatchesWildcard("*9?e")) return 9;
+                if (pixFmt.MatchesWildcard("*5?e")) return 5;
+                if (pixFmt.OrderBy(c => c) == "rgba".OrderBy(c => c)) return 8; // Check for any order of rgba
+                if (pixFmt.IsOneOf("nv12", "nv16", "ya8")) return 8;
+                if (pixFmt.MatchesWildcard("mono?")) return 1; // e.g. monow, monob
+                if (pixFmt.IsOneOf("gray", "pal8")) return 8;
+                return fallback;
             }
 
             public enum LayoutStringFormat { Raw, Prettier, Numbers }
@@ -113,6 +122,9 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary>
+        /// Beautifies the output of ffmpeg's progress stats (Frame, FPS, Bitrate, Size, Time, Speed).
+        /// </summary>
         public static string BeautifyFfmpegStats(string s)
         {
             if (s.IsEmpty())
@@ -169,6 +181,9 @@ namespace NmkdUtils
             return values.Join(" - ").Trim();
         }
 
+        /// <summary>
+        /// Returns a string containing the current platform, elevation status, and build timestamp.
+        /// <returns></returns>
         public static string ProgramInfo(string buildTimestamp)
         {
             string platform = OsUtils.IsWindows ? "[Windows]" : "[Linux/Other]";
@@ -177,6 +192,9 @@ namespace NmkdUtils
             return $"{platform}{elevated}{buildTime}";
         }
 
+        /// <summary>
+        /// Formats a strack trace to be more readable and compact
+        /// <returns></returns>
         public static string NicerStackTrace(string trace)
         {
             if (trace.IsEmpty())
@@ -197,9 +215,29 @@ namespace NmkdUtils
                 split[i] = $"{indentation}{split[i]}";
             }
 
-            trace = string.Join(Environment.NewLine, split);
+            trace = CleanStackTrace(split.ToList()).Join(Environment.NewLine);
             trace = trace.Replace("   at ", "");
             return trace;
+        }
+
+        /// <summary>
+        /// Removes internal compiler-generated types and local function names from a stack trace.
+        /// <returns></returns>
+        public static List<string> CleanStackTrace(List<string> lines)
+        {
+            // var lines = rawStackTrace.SplitIntoLines(ignoreEmpty: true);
+            var cleaned = new List<string>();
+            var displayClassPattern = new Regex(@"\.<\>c__DisplayClass\d+_\d+");
+            var localFuncPattern = new Regex(@"<(?<type>[^>]+)>g__(?<method>[^|]+)\|\d+");
+
+            foreach (var line in lines)
+            {
+                var step1 = displayClassPattern.Replace(line.Trim(), ""); // 1) strip out the generated display-class type
+                var step2 = localFuncPattern.Replace(step1, "${type}.${method}"); // 2) demangle local function names: "<VlmOcr>g__Sample|6" → "VlmOcr.Sample"
+                cleaned.Add(step2);
+            }
+
+            return cleaned;
         }
 
         public static string LastProjectStackItem(string trace)
