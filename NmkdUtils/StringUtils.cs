@@ -150,37 +150,6 @@ namespace NmkdUtils
             return repetitions.Any();
         }
 
-        public static Dictionary<string, List<string>> GroupByPrefix(IEnumerable<FileInfo> source, int amountOfBins = 2, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
-        {
-            source = source.OrderBy(s => s.Name, StringComparer.FromComparison(comparison)).ToList();
-            Dictionary<string, List<string>> grouped = [];
-            List<FileInfo> alreadyGrouped = [];
-
-            foreach (var s in source)
-            {
-                var name = s.Name;
-
-                if (alreadyGrouped.Contains(s))
-                    continue;
-
-                for (int i = 2; i < 1000; i++)
-                {
-                    string pfx = name.Substring(0, i);
-                    var newMatches = source.Where(x => x.Name.StartsWith(pfx, comparison) && !alreadyGrouped.Contains(x)).ToList();
-
-                    if (newMatches.Count == amountOfBins)
-                    {
-                        alreadyGrouped.AddRange(newMatches);
-                        grouped[pfx] = newMatches.Select(f => f.FullName).ToList();
-                        Logger.Log($"Grouped {newMatches.Count} items with prefix '{pfx}':\n{newMatches.Join("\n")}\n\n", Logger.Level.Debug);
-                        break;
-                    }
-                }
-            }
-
-            return grouped;
-        }
-
         private static string GetLongestPrefix(IReadOnlyList<string> words)
         {
             if (words is null || words.Count == 0)
@@ -228,28 +197,35 @@ namespace NmkdUtils
             if (s.IsEmpty())
                 return s;
 
-            Regex emojiRegex = new Regex(@"(?:[\uD800-\uDBFF][\uDC00-\uDFFF])|\uFE0F", RegexOptions.Compiled);
+            Regex emojiRegex = new Regex(@"(?:(\ud83c[\udde6-\uddff]){2}|([\#\*0-9]\u20e3)|(?:\u00a9|\u00ae|[\u2000-\u3300]|[\ud83c-\ud83e][\ud000-\udfff])(?:(?:\ud83c[\udffb-\udfff])?(?:\ud83e[\uddb0-\uddb3])?(?:\ufe0f?\u200d(?:[\u2000-\u3300]|[\ud83c-\ud83e][\ud000-\udfff])\ufe0f?)?)*)+", RegexOptions.Compiled);
             return emojiRegex.Replace(s, "");
         }
 
-        public static string[] SplitLongLines(string[] lines, int threshold = 45)
+        /// <summary>
+        /// Breaks long lines based on <paramref name="targetLength"/>. The hard limit is <paramref name="targetLength"/> * <paramref name="tolerance"/>. <br/>
+        /// <paramref name="windowFraction"/> controls how “wide” the prioritized split zone around the exact middle is (e.g. 0.25 = 50% of the total length).
+        /// </summary>
+        public static string[] SplitLongLines(string[] lines, int targetLength = 45, float tolerance = 1.25f, double windowFraction = 0.2)
         {
-            if (lines == null) throw new ArgumentNullException(nameof(lines));
-            if (threshold <= 0) throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be positive.");
+            if (lines == null)
+                return lines;
+
+            if (windowFraction <= 0 || windowFraction >= 0.5)
+                throw new ArgumentOutOfRangeException(nameof(windowFraction), "windowFraction must be > 0 and < 0.5");
 
             var result = new List<string>();
             foreach (var line in lines)
             {
-                if (string.IsNullOrEmpty(line) || line.Length <= (threshold * 1.33333f).RoundToInt())
+                if (string.IsNullOrEmpty(line) || line.Length <= (tolerance * tolerance).RoundToInt())
                 {
                     result.Add(line);
                     continue;
                 }
 
-                var remaining = line;
-                while (remaining.Length > threshold)
+                var remaining = line.Replace("...", "…"); // Replace ellipsis with a single character for splitting
+                while (remaining.Length > targetLength)
                 {
-                    int splitPos = FindSplitPosition(remaining, threshold);
+                    int splitPos = FindSplitPosition(remaining, targetLength, windowFraction);
                     var part = remaining.Substring(0, splitPos).Trim();
                     if (part.Length > 0)
                         result.Add(part);
@@ -260,63 +236,42 @@ namespace NmkdUtils
                     result.Add(remaining);
             }
 
-            return result.ToArray();
+            return result.Select(r => r.Replace("…", "...")).ToArray(); // Undo ellipsis replacement and return the result
 
-            int FindSplitPosition(string text, int threshold)
+            int FindSplitPosition(string text, int threshold, double wf)
             {
                 int limit = Math.Min(text.Length, threshold);
                 int mid = text.Length / 2;
-                int quarter = text.Length / 4;
-                int threeQuarter = 3 * text.Length / 4;
-                char[] punctuation = { '.', ',', ';', '!', '?', ':' };
+                int lower = Math.Max(0, (int)(mid - wf * text.Length));
+                int upper = Math.Min(limit, (int)(mid + wf * text.Length));
+                char[] punctuation = { '.', ',', ';', '!', '?', ':', '"', '…' };
 
-                // Prioritize splitting after punctuation within the middle 50% of the text
-                var punctPositions = Enumerable.Range(0, limit).Where(i => punctuation.Contains(text[i]) && i >= quarter && i <= threeQuarter).ToList();
+                // 1. punctuation in [lower..upper], not followed by letter/digit
+                var punctPositions = Enumerable.Range(lower, upper - lower)
+                    .Where(i =>
+                    {
+                        if (!punctuation.Contains(text[i])) return false;
+                        if (i + 1 < text.Length && char.IsLetterOrDigit(text[i + 1])) return false;
+                        return true;
+                    })
+                    .ToList();
                 if (punctPositions.Any())
                 {
-                    int bestPunct = punctPositions.OrderBy(i => Math.Abs(i - mid)).First();
-                    return bestPunct + 1; // include the punctuation
+                    int best = punctPositions.OrderBy(i => Math.Abs(i - mid)).First();
+                    return best + 1;
                 }
 
-                // Fallback: split at whitespace closest to the middle within the limit
+                // 2. whitespace in [0..limit]
                 var spacePositions = Enumerable.Range(0, limit).Where(i => char.IsWhiteSpace(text[i])).ToList();
                 if (spacePositions.Any())
                 {
-                    int bestSpace = spacePositions.OrderBy(i => Math.Abs(i - mid)).First();
-                    return bestSpace;
+                    int best = spacePositions.OrderBy(i => Math.Abs(i - mid)).First();
+                    return best;
                 }
 
-                // Hard split at the midpoint if no suitable whitespace or punctuation
+                // 3. fallback to midpoint
                 return mid;
             }
-        }
-
-        public static List<string> RemoveMatchingStartEnd(IEnumerable<string> strings)
-        {
-            int charsToRemoveStart = 0;
-
-            for (int i = 0; i < strings.MinBy(s => s.Length).Length; i++)
-            {
-                if (strings.All(s => s[i] == strings.First()[i]))
-                    charsToRemoveStart++;
-                else
-                    break;
-            }
-
-            int charsToRemoveEnd = 0;
-
-            for (int i = 0; i < strings.MinBy(s => s.Length).Length; i++)
-            {
-                if (strings.All(s => s[s.Length - 1 - i] == strings.First()[strings.First().Length - 1 - i]))
-                    charsToRemoveEnd++;
-                else
-                    break;
-            }
-
-            charsToRemoveStart = (charsToRemoveStart - 3).Clamp(0, 1000);
-            //charsToRemoveEnd = (charsToRemoveEnd - 12).Clamp(0, 1000);
-
-            return strings.Select(s => s.Substring(charsToRemoveStart, s.Length - charsToRemoveStart - charsToRemoveEnd)).ToList();
         }
 
         public static List<List<string>> RemoveIdenticalLines(List<List<string>> entries, string replaceWith = "...", bool pad = true)
@@ -376,7 +331,7 @@ namespace NmkdUtils
 
             foreach (string word in s.GetWords())
             {
-                if(convertList.Contains(word))
+                if (convertList.Contains(word))
                     continue;
 
                 int letterCount = word.Count(char.IsLetter);
@@ -397,12 +352,206 @@ namespace NmkdUtils
                 }
             }
 
-            if(convertList.Count == 0)
+            if (convertList.Count == 0)
                 return s;
 
             Logger.Log($"Auto-capitalize: {convertList.Join()}", print: false);
             convertList.ForEach(str => s = s.Replace(str, str.Up())); // Capitalize all words in the list
             return s;
+        }
+
+        /// <summary>
+        /// Checks a string for repeated words and limits the number of repetitions to <paramref name="maxRepetitions"/> while trying to preserve punctuation. <br/>
+        /// </summary>
+        public static List<string> LimitWordReps(IEnumerable<string> lines, int maxRepetitions = 4)
+        {
+            var original = lines.Join(" ⏎ ").Trim();
+            var normalizedLines = new List<string>();
+            foreach (var line in lines)
+            {
+                var tokens = line.Split(' ');
+                var resultTokens = new List<string>();
+                string lastCore = null;
+                int count = 0;
+
+                foreach (var token in tokens)
+                {
+                    var (core, punct) = SplitToken(token);
+
+                    // if it's just punctuation (no “word” inside), always emit it and reset
+                    if (string.IsNullOrEmpty(core))
+                    {
+                        resultTokens.Add(token);
+                        lastCore = null;
+                        count = 0;
+                        continue;
+                    }
+
+                    var normalizedCore = core.ToLowerInvariant();
+                    if (lastCore != null && normalizedCore == lastCore)
+                    {
+                        count++;
+                        if (count <= maxRepetitions)
+                        {
+                            resultTokens.Add(core + punct);
+                        }
+                        else if (count == maxRepetitions + 1)
+                        {
+                            // ensure the last kept copy carries the current punctuation
+                            int idx = resultTokens.Count - 1;
+                            resultTokens[idx] = core + punct;
+                        }
+                        // beyond that, skip
+                    }
+                    else
+                    {
+                        lastCore = normalizedCore;
+                        count = 1;
+                        resultTokens.Add(core + punct);
+                    }
+                }
+
+                normalizedLines.Add(string.Join(" ", resultTokens));
+            }
+
+            if (original != normalizedLines.Join(" ⏎ ").Trim())
+                Logger.Log($"Deduped words:\n{original}\n{normalizedLines.Join(" ⏎ ").Trim()}");
+
+            return normalizedLines;
+
+            (string core, string punct) SplitToken(string token)
+            {
+                int split = token.Length;
+                while (split > 0 && char.IsPunctuation(token[split - 1]))
+                    split--;
+                string core = split > 0 ? token[..split] : "";
+                string punct = split < token.Length ? token[split..] : "";
+                return (core, punct);
+            }
+        }
+
+        /// <summary>
+        /// Trims any run of consecutive identical characters in <paramref name="s"/> so that no character repeats more than <paramref name="threshold"/> times in a row.
+        /// </summary>
+        public static string LimitCharReps(string s, int threshold)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            threshold = threshold.Clamp(1, 1000); // Ensure threshold is within a reasonable range
+            var sb = new StringBuilder(s.Length);
+            char previousChar = '\0';
+            int runCount = 0;
+
+            foreach (char c in s)
+            {
+                if (c == previousChar)
+                {
+                    runCount++;
+                }
+                else
+                {
+                    previousChar = c;
+                    runCount = 1;
+                }
+
+                if (runCount <= threshold)
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Removes repetitions of any char in <paramref name="charsToCollapse"/>, collapsing consecutive runs down to a single char.
+        /// </summary>
+        public static string TrimCharReps(string s, IEnumerable<char> charsToCollapse)
+        {
+            if (s.IsEmpty() || charsToCollapse == null || charsToCollapse.None())
+                return s;
+
+            var toCollapse = new HashSet<char>(charsToCollapse); // For O(1) lookup
+            var sb = new StringBuilder(s.Length);
+            char previousChar = '\0';
+
+            foreach (char c in s)
+            {
+                if (c == previousChar && toCollapse.Contains(c)) // If this char is one we're collapsing AND it's the same as the last one we kept, skip it; otherwise append.
+                    continue;
+
+                sb.Append(c);
+                previousChar = c;
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary> Checks if a string is a valid Base64-encoded string. </summary>
+        public static bool IsBase64(string s)
+        {
+            if (s.IsEmpty() || s.Length % 4 != 0)
+                return false;
+            Span<byte> buffer = new byte[s.Length];
+            return Convert.TryFromBase64String(s, buffer, out _);
+        }
+
+        /// <summary> Checks if a string is a valid web URL (http or https). </summary>
+        public static bool IsWebUrl(string s)
+        {
+            if (!Uri.TryCreate(s, UriKind.Absolute, out var uri))
+                return false;
+            return uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp;
+        }
+
+        /// <summary> Checks if a path could be a file path without any actual I/O operations. </summary>
+        public static bool CouldBeFilePath(string s)
+        {
+            if (s.IsEmpty())
+                return false;
+            // file:// URIs
+            if (Uri.TryCreate(s, UriKind.Absolute, out var uri) && uri.IsFile)
+                return true;
+            // Windows drive- or UNC-based paths
+            if (!Path.IsPathFullyQualified(s))
+                return false;
+            return s.IndexOfAny(Path.GetInvalidPathChars()) == -1;
+        }
+
+        public static string GetClosestFuzzyMatch(IEnumerable<string> strings, string target, int threshold = 90)
+        {
+            if (strings == null || !strings.Any() || target.IsEmpty())
+                return null;
+
+            return strings.Where(s => s.FuzzyMatches(target, threshold)).OrderByDescending(s => s.GetFuzzyMatchScore(target)).FirstOrDefault(); // Return the first (best) match
+        }
+
+        public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true)
+        {
+            if (s.IsEmpty() || find.IsEmpty())
+                return s;
+
+            var lines = s.SplitIntoLines();
+
+            for(int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i] == find || lines[i].IsEmpty())
+                    continue;
+
+                var score = lines[i].GetFuzzyMatchScore(find);
+
+                if (score >= threshold)
+                {
+                    if (mustMatchWordCount && lines[i].GetWordCount() != find.GetWordCount())
+                        continue;
+
+                    Logger.Log($"Replacing line '{lines[i]}' with '{replace}' (fuzzy match {score}%)");
+                    lines[i] = replace;
+                }
+            }
+
+            return lines.Join("\n");
         }
     }
 }
