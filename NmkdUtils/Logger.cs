@@ -29,7 +29,7 @@ namespace NmkdUtils
 
         public static string LogsDir { get; private set; }
         private static readonly bool _debugger;
-        public enum Level { Debug, Verbose, Info, Warning, Error, None }
+        public enum Level { None, Debug, Verbose, Info, Warning, Error, Force }
         public static Level ConsoleLogLevel = Level.Info;
         public static Level FileLogLevel = Level.Info;
         public static bool PrintLogLevel = true;
@@ -135,7 +135,10 @@ namespace NmkdUtils
                 return;
             }
 
-            if ((level != Level.None && (int)level >= (int)ConsoleLogLevel) || ((int)level >= (int)FileLogLevel))
+            // Check log importance against current log levels
+            bool importantEnough = level == Level.Force || ((int)level >= (int)ConsoleLogLevel || (int)level >= (int)FileLogLevel);
+
+            if (level != Level.None && importantEnough)
             {
                 var logEntry = new Entry { Message = $"{o}", LogLevel = level, ShowTwiceTimeout = showTwiceTimeout, ReplaceWildcard = replaceWildcard };
                 SetIfNotNull(ref logEntry.Print, print);
@@ -145,7 +148,7 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(Exception e, string note, bool printTrace = true)
+        public static void Log(Exception e, string note = "", bool printTrace = true)
         {
             string trace = e.StackTrace ?? "";
             string location = trace.IsEmpty() ? "Unknown Location" : FormatUtils.LastProjectStackItem(trace);
@@ -170,10 +173,10 @@ namespace NmkdUtils
 
             lock (_logLock)
             {
-                bool printOrWrite = entry.Print || entry.WriteToFile; // Don't log if we're not printing or logging to file
-                bool levelDisabled = DisabledLevels.Contains(level); // Don't log if this log level is disabled
+                bool printOrWrite = entry.Print || entry.WriteToFile; // Don't log if both console printing and file writing is disabled (nothing would happen)
+                bool levelEnabled = !DisabledLevels.Contains(level); // Don't log if this log level is disabled
                 bool duplicateTooFast = entry.ShowTwiceTimeout > 0 && msg == LastLogMsg && (DateTime.Now - _lastLogTime).TotalMilliseconds < entry.ShowTwiceTimeout; // Don't log if the msg is identical to the previous & ShowTwiceTimeout hasn't passed
-                shouldLog = printOrWrite && !levelDisabled && !duplicateTooFast;
+                shouldLog = printOrWrite && levelEnabled && !duplicateTooFast;
 
                 if (shouldLog)
                 {
@@ -185,7 +188,7 @@ namespace NmkdUtils
             if (!shouldLog)
                 return;
 
-            if (entry.Print && (int)level >= (int)ConsoleLogLevel) // Check if this message should be printed to console and if the loglevel is high enough
+            if (entry.Print && ConsoleLogLevel != Level.None && (int)level >= (int)ConsoleLogLevel) // Check if message should be printed to console & level is not None & loglevel is high enough
             {
                 string msgNoPrefix = msg;
                 var lines = msg.SplitIntoLines();
@@ -219,7 +222,7 @@ namespace NmkdUtils
                 OnConsoleWrittenWithLvl?.Invoke(output);
             }
 
-            if (entry.WriteToFile && (int)level >= (int)FileLogLevel) // Check if this message should be written to file and if the loglevel is high enough
+            if (entry.WriteToFile && (int)level >= (int)FileLogLevel) // Check if message should be written to file & if loglevel is high enough
             {
                 var now = DateTime.Now;
                 var lines = msg.SplitIntoLines();
@@ -254,22 +257,23 @@ namespace NmkdUtils
 
         public static void WaitForEmptyQueue()
         {
-            Thread.Sleep(90);
+            Thread.Sleep(10);
 
             while (_logQueue.Count > 0)
             {
                 Thread.Sleep(10);
             }
 
-            Thread.Sleep(10);
+            Thread.Sleep(40);
         }
 
-        public static void DumpConsoleColors()
+        /// <summary> Shows all available ConsoleColor values in the console with a sample text. </summary>
+        public static void PrintConsoleColors()
         {
             Log("Console Colors:");
             foreach (ConsoleColor color in Enum.GetValues(typeof(ConsoleColor)))
             {
-                Log(new Entry($"This is ConsoleColor.{color}!") { CustomColor = color });
+                Log(new Entry($"  This is ConsoleColor.{color}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.") { CustomColor = color, WriteToFile = false });
             }
             Console.ResetColor();
         }
