@@ -143,6 +143,20 @@ namespace NmkdUtils
             return list.GroupBy(selector).MaxBy(g => g.Count()).Key;
         }
 
+        public static T MostCommon<T>(this IEnumerable<T> list, out int count)
+        {
+            if (list == null || list.Count() == 0)
+            {
+                count = 0;
+                return default;
+            }
+
+            var grp = list.GroupBy(item => item).MaxBy(g => g.Count());
+            count = grp.Count();
+            return grp.Key;
+        }
+
+
         #endregion
 
         #region Exceptions
@@ -179,6 +193,31 @@ namespace NmkdUtils
                 return aggEx.InnerExceptions.Select(e => e.GetType().ToString()).ToList();
 
             return [ex.GetType().ToString()];
+        }
+
+        /// <summary> Returns a List of exceptions in case it's an AggregateException, otherwise just returns the single exception. </summary>
+        public static List<Exception> Unwrap(this Exception ex)
+        {
+            if (ex is AggregateException aggregate)
+                return aggregate.Flatten().InnerExceptions.ToList();
+
+            return [ex];
+        }
+
+        public static List<string> GetMessages (this Exception ex)
+        {
+            if (ex is AggregateException aggregate)
+                return aggregate.Flatten().InnerExceptions.Select(e => e.Message).ToList();
+
+            return [ex.Message];
+        }
+
+        public static void Log(this Exception ex, bool withTrace = true)
+        {
+            foreach(var e in ex.Unwrap())
+            {
+                Logger.Log(e, printTrace: withTrace);
+            }
         }
 
         #endregion
