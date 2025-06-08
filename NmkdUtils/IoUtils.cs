@@ -63,13 +63,13 @@ namespace NmkdUtils
         /// <summary> Get directories sorted by name (manual recursion to ignore inaccessible entries) </summary>
         public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = true)
         {
-            return GetDirInfosSorted(root, recursive ? int.MaxValue : 0, pattern, noWarnings);
+            return GetDirInfosSorted(root, recursive ? int.MaxValue : 1, pattern, noWarnings);
         }
 
         /// <summary>
         /// Get directories in <paramref name="root"/>, filtered with wildcard <paramref name="pattern"/>, sorted by name, with a maximum recursion depth <paramref name="maxDepth"/> (0 = No recursion).<br/>
         /// </summary>
-        public static DirectoryInfo[] GetDirInfosSorted(string root, int maxDepth = 0, string pattern = "*", bool noWarnings = true)
+        public static DirectoryInfo[] GetDirInfosSorted(string root, int maxDepth = 128, string pattern = "*", bool noWarnings = true)
         {
             // Guard clause: if root is invalid or doesn't exist, return empty
             if (root.IsEmpty() || !Directory.Exists(root))
@@ -88,7 +88,8 @@ namespace NmkdUtils
                 try
                 {
                     // Add current directory info to the list
-                    directories.Add(new DirectoryInfo(currentDir));
+                    if (depth > 0)
+                        directories.Add(new DirectoryInfo(currentDir));
 
                     if (depth >= maxDepth)
                         continue;
@@ -159,6 +160,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Does nothing if <paramref name="dryRun"/> is true. </summary>
         public static void DeletePath(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
             try
