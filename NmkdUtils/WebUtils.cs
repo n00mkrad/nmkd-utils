@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 
 namespace NmkdUtils
 {
@@ -70,10 +71,51 @@ namespace NmkdUtils
             return responseBody;
         }
 
-        public static void DownloadToFile(string url, string filePath, HttpClient? client = null)
+        public static void DownloadFile(string url, string filePath, HttpClient? client = null, bool log = false)
+        {
+            if(log)
+            {
+                Logger.Log($"Downloading file from {url} to {filePath} {(client == null ? "using new HttpClient" : "with existing HttpClient")}", Logger.Level.Info);
+            }
+
+            try
+            {
+                client ??= _http;
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using var response = client.Send(request);
+                using var stream = response.Content.ReadAsStream();
+                using var fileStream = new FileStream(filePath, FileMode.CreateNew);
+                stream.CopyTo(fileStream);
+            }
+            catch(Exception ex)
+            {
+                Logger.Log(ex, "Download failed");
+            }
+        }
+
+        public static void DownloadFileCurl(string url, string filePath, bool log = false)
+        {
+            if (log)
+            {
+                Logger.Log($"Downloading file using curl from {url} to {filePath}", Logger.Level.Info);
+            }
+
+            string cmd = $"curl -L {url.Wrap()} -o {filePath.Wrap()}";
+            var result = OsUtils.RunCommandShell(cmd);
+
+            if(result.ExitCode != 0)
+            {
+                Logger.LogErr($"curl exited with code {result.ExitCode}.");
+                Logger.LogErr(result.Output);
+            }
+        }
+
+        public static Stream LoadStream(string url, HttpClient? client = null)
         {
             client ??= _http;
-            client.DownloadFile(url, filePath);
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = client.Send(request);
+            return response.Content.ReadAsStream();
         }
     }
 }

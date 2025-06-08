@@ -7,21 +7,15 @@ namespace NmkdUtils
 {
     public static class WebExtensions
     {
-        public static async Task DownloadFileAsync(this HttpClient client, string uri, string path)
+        public static async Task DownloadFileAsync(this HttpClient client, string url, string path)
         {
-            using var stream = await client.GetStreamAsync(uri);
+            using var stream = await client.GetStreamAsync(url);
             using var fileStream = new FileStream(path, FileMode.CreateNew);
             await stream.CopyToAsync(fileStream);
         }
 
-        public static void DownloadFile(this HttpClient client, string uri, string path)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            using var response = client.Send(request);
-            using var stream = response.Content.ReadAsStream();
-            using var fileStream = new FileStream(path, FileMode.CreateNew);
-            stream.CopyTo(fileStream);
-        }
+        public static void DownloadFile(this HttpClient client, string url, string path) => WebUtils.DownloadFile(url, path, client);
+        public static Stream DownloadFileStream(this HttpClient client, string uri) => WebUtils.LoadStream(uri, client);
 
         public static JObject GetJson(this HttpClient client, string url, Logger.Level logLvl = Logger.Level.Verbose)
         {
@@ -43,7 +37,16 @@ namespace NmkdUtils
         {
             var jsonString = payload is JObject jo ? jo.ToString() : JsonConvert.SerializeObject(payload);
             using var content = new StringContent(jsonString, Encoding.UTF8, "application/json");
-            using var response = client.PostAsync(url, content).Result;
+            HttpResponseMessage? response = null;
+
+            try
+            {
+                response = client.PostAsync(url, content).Result;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Web request error");
+            }
 
             if (response == null || !response.IsSuccessStatusCode)
             {
@@ -52,6 +55,7 @@ namespace NmkdUtils
             }
 
             var body = response.Content.ReadAsStringAsync().Result;
+            response.Dispose();
 
             try
             {
