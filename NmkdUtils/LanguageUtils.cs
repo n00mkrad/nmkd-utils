@@ -6,7 +6,7 @@ namespace NmkdUtils
 {
     public class LanguageUtils
     {
-        [DebuggerDisplay("{Name}/{NativeName} - ISO 639-1 {Iso6391}, ISO 639-2 {Iso6392}, ISO 639-2 {Iso6392B}")]
+        [DebuggerDisplay("{Name}/{NativeName} - ISO 639-1 {Iso6391}, ISO 639-2 {Iso6392}, ISO 639-2/B {Iso6392B}")]
         public class Language
         {
             /// <summary> Language Family (e.g. "Indo-European") </summary>
@@ -41,22 +41,26 @@ namespace NmkdUtils
             return new Language("Undefined", "Undefined", "Undefined", "un", "und", "und"); // Note: ISO-639-1 "un" code is non-standard, but ISO-639-2 "und" is.
         }
 
+        /// <summary> Gets a language by its English name or ISO-639 code </summary>
         public static Language GetLangByNameOrCode(string nameOrCode)
         {
             return GetLangByName(nameOrCode) ?? GetLangByCode(nameOrCode);
         }
 
+        /// <summary> Gets a language by its English name </summary>
         public static Language GetLangByName(string name)
         {
             return Languages.Where(l => l.Name.IsNotEmpty() && l.Name.Low() == name.Low()).FirstOrDefault();
         }
 
+        /// <summary> Gets a language by its code (639-1, 639-2, or 639-2/B) </summary>
         public static Language GetLangByCode(string code)
         {
             code = code.Low();
             return GetLangByCodes(code, code, code);
         }
 
+        /// <summary> Gets a language by its code (639-1, 639-2, or 639-2/B) </summary>
         public static Language GetLangByCodes(string iso6391, string iso6392, string iso6392B = "")
         {
             var lang = Languages.Where(l => l.Iso6391.IsNotEmpty() && l.Iso6391 == iso6391).FirstOrDefault();
