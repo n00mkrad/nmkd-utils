@@ -59,19 +59,22 @@ namespace NmkdUtils
         }
 
 
-        [GeneratedRegex("\r\n|\r|\n")]
-        private static partial Regex SplitIntoLinesPattern();
-        public static string[] SplitIntoLines(this string str) => SplitIntoLinesPattern().Split(str);
-        public static string[] SplitIntoLinesOut(this string str, out string[] lines)
+        [GeneratedRegex("\r\n|\r|\n")] private static partial Regex SplitIntoLinesPattern();
+        public static string[] SplitIntoLines(this string str, bool ignoreEmpty = false)
         {
-            lines = SplitIntoLines(str);
+            var split = SplitIntoLinesPattern().Split(str);
+            return ignoreEmpty ? split.Where(line => line.IsNotEmpty()).ToArray() : split;
+        }
+        public static string[] SplitIntoLinesOut(this string str, out string[] lines, bool ignoreEmpty = false)
+        {
+            lines = SplitIntoLines(str, ignoreEmpty);
             return lines;
         }
 
         /// <summary>
         /// Split a string by a <paramref name="separator"/> into <paramref name="parts"/>. Returns true if the split resulted in at least 2 parts, or exactly the <paramref name="targetParts"/> count if specified.
         /// </summary>
-        public static bool SplitOut (this string str, string separator, out string[] parts, int targetParts = -1)
+        public static bool SplitOut(this string str, string separator, out string[] parts, int targetParts = -1)
         {
             parts = str.Length == 1 ? str.Split(separator[0]) : str.Split(separator); // Use single char split if possible
 
@@ -121,6 +124,41 @@ namespace NmkdUtils
             return input.Split(separator).Where(s => s.IsNotEmpty());
         }
 
+        /// <summary>
+        /// Splits a string by multiple separators
+        /// </summary>
+        public static string[] Split(this string s, IEnumerable<string> separators, bool ci = false)
+        {
+            if (s == null)
+                return [];
+
+            var result = new List<string>();
+            int startIndex = 0;
+            while (startIndex <= s.Length)
+            {
+                int matchIndex = -1;
+                string matchSep = null;
+                foreach (var sep in separators)
+                {
+                    if (string.IsNullOrEmpty(sep)) continue;
+                    int idx = s.IndexOf(sep, startIndex, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                    if (idx >= 0 && (matchIndex < 0 || idx < matchIndex))
+                    {
+                        matchIndex = idx;
+                        matchSep = sep;
+                    }
+                }
+                if (matchIndex < 0)
+                {
+                    result.Add(s[startIndex..]);
+                    break;
+                }
+                result.Add(s[startIndex..matchIndex]);
+                startIndex = matchIndex + matchSep.Length;
+            }
+            return result.Skip(1).ToArray();
+        }
+
         public static float GetFloat(this string? str)
         {
             if (str == null || str.Length < 1)
@@ -142,6 +180,12 @@ namespace NmkdUtils
             return s.Trim();
         }
 
+        public static bool GetIntOut(this string? str, out int value, bool allowScientificNotation = false)
+        {
+            value = str.GetInt(allowScientificNotation, failureValue: int.MinValue);
+            return value != int.MinValue;
+        }
+
         public static int GetInt(this string? str, out bool success, bool allowScientificNotation = false)
         {
             int i = str.GetInt(allowScientificNotation, failureValue: int.MinValue);
@@ -151,8 +195,8 @@ namespace NmkdUtils
 
         public static int GetInt(this string? str, bool allowScientificNotation = false, int failureValue = 0)
         {
-            if (str == null || str.Length < 1)
-                return 0;
+            if (str.IsEmpty())
+                return failureValue;
 
             str = str.Trim();
 
@@ -168,7 +212,7 @@ namespace NmkdUtils
             }
             catch
             {
-                return 0;
+                return failureValue;
             }
         }
 
@@ -287,7 +331,7 @@ namespace NmkdUtils
         /// <summary> Replaces a string if it starts with the <paramref name="find"/> string. Ignores later occurences unless <paramref name="firstOccurenceOnly"/> is false. </summary>
         public static string ReplaceAtStart(this string s, string find, string replace, bool firstOccurenceOnly = true, bool caseIns = false)
         {
-            if(s.IsEmpty() || !s.StartsWith(find))
+            if (s.IsEmpty() || !s.StartsWith(find))
                 return s;
 
             if (firstOccurenceOnly)
@@ -297,13 +341,28 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
-        public static string SquashLines(this string s, string delimiter = " ")
+        public static string SquashLines(this string s, string delimiter = " ", List<string>? unlessLineStartsWith = null)
         {
             if (s.IsEmpty())
                 return s;
 
+            if (unlessLineStartsWith != null)
+            {
+                foreach (var exceptionStr in unlessLineStartsWith)
+                {
+                    s = s.Replace($"\n{exceptionStr}", $"<<<NO_LINE_BREAK>>>{exceptionStr}");
+                }
+            }
+
             string pattern = @"(?:\r\n|\r|\n)+"; // matches one or more occurrences of \r\n (Windows), \n (Unix), or \r (older Macs)
-            return Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
+            var result = Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
+
+            if (unlessLineStartsWith != null)
+            {
+                result = result.Replace($"<<<NO_LINE_BREAK>>>", $"\n");
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -387,7 +446,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Trims whitespaces as well as trailing slashes or backslashes </summary>
-        public static string TrimPath (this string s)
+        public static string TrimPath(this string s)
         {
             if (s.IsEmpty())
                 return s;
@@ -423,7 +482,7 @@ namespace NmkdUtils
         /// <summary>
         /// Removes text in parentheses, including the parentheses themselves. Optionally removes the leading space before the parentheses.
         /// </summary>
-        public static string RemoveTextInParentheses (this string s, bool includeLeadingSpace = true)
+        public static string RemoveTextInParentheses(this string s, bool includeLeadingSpace = true)
         {
             string pattern = includeLeadingSpace ? @"\s*\([^()]*\)" : @"\([^()]*\)";
             return Regex.Replace(s, pattern, "");
@@ -455,7 +514,7 @@ namespace NmkdUtils
         {
             if (s.IsEmpty())
                 return s;
-            
+
             string pattern = includeAnyWhitespace ? @"\s+" : " +"; // Choose the appropriate regex: "\s+" matches any whitespace, " +" matches only space characters.
             return Regex.Replace(s, pattern, " ");
         }
@@ -473,7 +532,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Uses TextCopy to copy a string to the clipboard. </summary>
-        public static void CopyToClipboard (this string s)
+        public static void CopyToClipboard(this string s)
         {
             TextCopy.ClipboardService.SetText(s);
         }
@@ -482,7 +541,7 @@ namespace NmkdUtils
         {
             var strComp = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
-            if(strings.Length == 0)
+            if (strings.Length == 0)
                 return false;
 
             if (strings.Length == 1 && strings[0] is IEnumerable<string> col)
@@ -551,12 +610,65 @@ namespace NmkdUtils
             return string.Concat(Enumerable.Repeat(s, count));
         }
 
+        /// <summary> Like replace, but using a RegEx pattern. </summary>
         public static string ReplaceRegex(this string s, string pattern, string replacement = "")
         {
             if (s.IsEmpty() || pattern.IsEmpty())
                 return s;
 
             return Regex.Replace(s, pattern, replacement);
+        }
+
+        private static string TrimSide(this string s, string trimStr, bool ci, bool fromStart)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            var comparison = ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+            if (fromStart)
+            {
+                while (s.StartsWith(trimStr, comparison))
+                {
+                    s = s.Substring(trimStr.Length);
+                }
+            }
+            else
+            {
+                while (s.EndsWith(trimStr, comparison))
+                {
+                    s = s.Substring(0, s.Length - trimStr.Length);
+                }
+            }
+
+            return s;
+        }
+
+        /// <summary> <inheritdoc cref="Trim(string, string, bool)"/>/> </summary>
+        public static string TrimStart(this string s, string trimStr, bool ci = false) => s.TrimSide(trimStr, ci, fromStart: true);
+
+        /// <summary> <inheritdoc cref="Trim(string, string, bool)"/>/> </summary>
+        public static string TrimEnd(this string s, string trimStr, bool ci = false) => s.TrimSide(trimStr, ci, fromStart: false);
+
+        /// <summary> Trim an entire string instead of a char from a string. Case-insensitive if <paramref name="ci"/> is true. </summary>
+        public static string Trim(this string s, string trimStr, bool ci = false) => s.IsEmpty() ? s : s.TrimStart(trimStr, ci).TrimEnd(trimStr, ci);
+
+        public static bool FuzzyMatches(this string s, string comparisonStr, int threshold = 90, bool trim = true) => s.GetFuzzyMatchScore(comparisonStr, trim) >= threshold;
+
+        public static int GetFuzzyMatchScore(this string s, string comparisonStr, bool trim = true)
+        {
+            if (s.IsEmpty() || comparisonStr.IsEmpty())
+                return 0;
+
+            if (trim)
+            {
+                s = s.Trim();
+            }
+
+            var score = FuzzySharp.Fuzz.WeightedRatio(s, comparisonStr);
+            // if(score > 70)
+            //     Debug.WriteLine($"Fuzz score; Checking for '{comparisonStr}' in '{s}': {score}");
+            return score;
         }
     }
 }
