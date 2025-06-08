@@ -10,7 +10,7 @@ namespace NmkdUtils
         public static int FfprobeCacheMisses = 0;
         private static Dictionary<string, string> _ffprobeOutputCache = []; // Key = File hash, Value = Command output
 
-        public static string GetFfprobeOutput(string path, string? executable = null, string args = "-v error -print_format json -show_format -show_streams", bool allowCaching = true)
+        public static string GetFfprobeOutput(string path, string? executable = null, string args = "-v error -print_format json -show_format -show_streams -show_chapters", bool allowCaching = true)
         {
             if (CodeUtils.Assert(!File.Exists(path), () => Logger.LogErr($"File not found: {executable}")))
                 return "";
@@ -37,7 +37,7 @@ namespace NmkdUtils
             return cmdResult.StdOut;
         }
 
-        public static JObject GetFfprobeJson(string path, string? executable = null, string args = "-v error -show_format -show_streams", bool allowCaching = true)
+        public static JObject GetFfprobeJson(string path, string? executable = null, string args = "-v error -show_format -show_streams -show_chapters", bool allowCaching = true)
         {
             string json = GetFfprobeOutput(path, executable, $"-print_format json {args}", allowCaching);
 

@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using NmkdUtils.Structs;
 using System.Drawing;
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Runtime.Serialization;
 using static NmkdUtils.Media.MediaData;
 
@@ -183,38 +184,62 @@ namespace NmkdUtils.Media
     {
         public FrameData? FrameData { get; set; } = null;
         public ColorMasteringData? ColorData { get; set; } = null;
-        public ColorInfo? Color { get; set; } = null;
-        [JsonIgnore] public int Width => Values.Get("width", "").GetInt();
-        [JsonIgnore] public int Height => Values.Get("height", "").GetInt();
-        [JsonIgnore] public int ResSum => Width + Height;
-        [JsonIgnore] public string PixFmt => Values.Get("pix_fmt");
-        [JsonIgnore] public string Sar => Values.Get("sample_aspect_ratio");
-        [JsonIgnore] public string Dar => Values.Get("display_aspect_ratio");
-        [JsonIgnore] public Size ScaledRes => GetScaledRes();
-        [JsonIgnore] public Fraction Fps => new Fraction(Values.Get("r_frame_rate", ""));
-        [JsonIgnore] public Fraction AvgFps => new Fraction(Values.Get("avg_frame_rate", ""));
-        [JsonIgnore] public bool SeemsVfr => Math.Abs(Fps.Float - AvgFps.Float) / ((Fps.Float + AvgFps.Float) / 2f) > 0.2f;
-        [JsonIgnore] public string Profile => Values.Get("profile");
-        [JsonIgnore] public int DoviProfile => SideData?.FirstOrDefault(x => x.ContainsKey("dv_profile")).Get("dv_profile", "-1").GetInt() ?? -1;
-        [JsonIgnore] public int Rotation => SideData?.FirstOrDefault(x => x.ContainsKey("rotation")).Get("rotation", "0").GetInt() ?? 0;
-        [JsonIgnore] public bool Hdr10Plus => FrameData?.SideData?.Any(e => $"{e["side_data_type"]}".Contains("HDR10+")) ?? false;
+        public ColorInfo? Color = null;
+        public int Width;
+        public int Height;
+        public int ResSum;
+        public float Aspect;
+        public Size ScaledRes;
+        public string PixFmt = "";
+        public string Sar = "1:1";
+        public string Dar = "";
+        public string Profile = "";
+        public Fraction Fps;
+        public Fraction AvgFps;
+        public bool SeemsVfr;
+        public int DoviProfile;
+        public bool Hdr10Plus;
+        public int Rotation;
 
         public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData? cd = null)
         {
             Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed;
+            // Color
             Color = new ColorInfo(Values.Get("color_space"), Values.Get("color_transfer"), Values.Get("color_primaries"), Values.Get("color_range", "tv") != "tv");
+            PixFmt = Values.Get("pix_fmt");
+            // Resolution/Scaling
+            Width = Values.Get("width", "").GetInt();
+            Height = Values.Get("height", "").GetInt();
+            ResSum = Width + Height;
+            GetScaledRes(out Size scaledRes);
+            ScaledRes = scaledRes;
+            Aspect = scaledRes.Width / (float)scaledRes.Height;
+            Sar = Values.Get("sample_aspect_ratio", "1:1");
+            Dar = Values.Get("display_aspect_ratio");
+            // HDR
+            DoviProfile = SideData?.FirstOrDefault(x => x.ContainsKey("dv_profile")).Get("dv_profile", "-1").GetInt() ?? -1;
+            Hdr10Plus = FrameData?.SideData?.Any(e => $"{e["side_data_type"]}".Contains("HDR10+")) ?? false;
+            // FPS & Other
+            Fps = new Fraction(Values.Get("r_frame_rate", ""));
+            AvgFps = new Fraction(Values.Get("avg_frame_rate", ""));
+            SeemsVfr = Math.Abs(Fps.Float - AvgFps.Float) / ((Fps.Float + AvgFps.Float) / 2f) > 0.2f;
+            Profile = Values.Get("profile");
+            Rotation = SideData?.FirstOrDefault(x => x.ContainsKey("rotation")).Get("rotation", "0").GetInt() ?? 0;
         }
 
         // Scale using SAR (Sample Aspect Ratio) for non-square pixels
-        private Size GetScaledRes()
+        private Size GetScaledRes(out Size size)
         {
+            size = new Size(Width, Height);
+
             if (!Sar.SplitOut(":", out string[] split, targetParts: 2) || !int.TryParse(split[0], out int sampleWidth) || !int.TryParse(split[1], out int sampleHeight) || sampleWidth == sampleHeight)
-                return new Size(Width, Height);
+                return size;
 
             bool wider = sampleWidth > sampleHeight; // Is the pixel wider than it is tall?
             double ratio = wider ? (double)sampleWidth / sampleHeight : (double)sampleHeight / sampleWidth;
             int newLength = wider ? (int)Math.Round(Width * ratio) : (int)Math.Round(Height * ratio);
-            return wider ? new Size(newLength, Height) : new Size(Width, newLength);
+            size = wider ? new Size(newLength, Height) : new Size(Width, newLength);
+            return size;
         }
     }
 

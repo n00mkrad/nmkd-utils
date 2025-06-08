@@ -30,9 +30,18 @@ namespace NmkdUtils.Media
             public int FfprobeScore { get; set; }
             public Dictionary<string, string> Tags { get; set; } = [];
 
-            [JsonIgnore] public string Title => Tags.Get("title");
-            [JsonIgnore] public TimeSpan Duration => TimeSpan.FromSeconds(DurationSecs);
-            [JsonIgnore] public string DurationStr => FormatUtils.Time(Duration);
+            public List<(float StartTime, float EndTime, string Title)> Chapters = [];
+            public string Title = "";
+            public TimeSpan Duration = TimeSpan.Zero;
+            public string DurationStr = "";
+
+            public void ParseAdditionalValues(JObject j)
+            {
+                Chapters = j["chapters"]?.Select(c => (c["start_time"].Value<float>(), c["end_time"].Value<float>(), $"{c["tags"]?["title"]}")).ToList() ?? [];
+                Title = Tags.Get("title");
+                Duration = TimeSpan.FromSeconds(DurationSecs);
+                DurationStr = FormatUtils.Time(Duration);
+            }
 
             public override string ToString()
             {

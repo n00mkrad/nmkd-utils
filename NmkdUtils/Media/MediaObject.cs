@@ -68,6 +68,7 @@ namespace NmkdUtils.Media
             var parsedData = JsonConvert.DeserializeObject<MediaObject>(json, settings);
             Streams = parsedData.Streams.Select(CreateStream).ToList();
             Format = parsedData.Format;
+            Format.ParseAdditionalValues(JObject.Parse(json));
 
             if (loadFrameData && VidStreams.Any())
             {
