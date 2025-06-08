@@ -11,25 +11,22 @@ namespace NmkdUtils
             Down
         }
 
-        public static int RoundToInt(this float f, Rounding method = Rounding.Normal)
+        public static int RoundToInt(this double d, Rounding method = Rounding.Normal, int divBy = 1)
         {
-            return method switch
-            {
-                Rounding.Up => (int)Math.Ceiling(f),
-                Rounding.Down => (int)Math.Floor(f),
-                _ => (int)Math.Round(f),
-            };
-        }
-
-        public static int RoundToInt(this double d, Rounding method = Rounding.Normal)
-        {
-            return method switch
+            int i = method switch
             {
                 Rounding.Up => (int)Math.Ceiling(d),
                 Rounding.Down => (int)Math.Floor(d),
                 _ => (int)Math.Round(d),
             };
+
+            if (divBy <= 1)
+                return i;
+
+            bool? roundFlag = method == Rounding.Normal ? null : method == Rounding.Up;
+            return i.RoundToMultiple(divBy, roundFlag);
         }
+        public static int RoundToInt(this float f, Rounding method = Rounding.Normal, int divBy = 1) => ((double)f).RoundToInt(method, divBy);
 
         public static long RoundToLong(this double d, Rounding method = Rounding.Normal)
         {
@@ -88,6 +85,11 @@ namespace NmkdUtils
         public static bool EqualsRoughly(this float a, float b, float tolerance = 0.0001f)
         {
             return Math.Abs(a - b) < tolerance;
+        }
+
+        public static bool IsInRange(this int value, int min, int max = int.MaxValue)
+        {
+            return value >= min && value <= max;
         }
     }
 }
