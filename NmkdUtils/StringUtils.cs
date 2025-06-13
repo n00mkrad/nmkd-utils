@@ -8,24 +8,25 @@ namespace NmkdUtils
 {
     public class StringUtils
     {
-        /// <summary> Returns the longest string that all strings start with (e.g. a common root path of many file paths) </summary>
-        public static string FindLongestCommonPrefix(IEnumerable<string> strings)
+        /// <summary> Returns the longest string that all strings start with (e.g. a common root path of many file paths). <br/> Case-insensitive if <paramref name="ci"/> is true. </summary>
+        public static string FindLongestCommonPrefix(IEnumerable<string> strings, bool ci = false)
         {
             var stringsArray = strings is string[]? (string[])strings : strings.ToArray();
 
             if (stringsArray == null || stringsArray.Length == 0)
                 return "";
 
+            var stringComp = ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             // Start by assuming the whole first string is the common prefix
             string prefix = stringsArray[0];
 
             for (int i = 1; i < stringsArray.Length; i++)
             {
-                // Reduce the prefix length until a match is found
-                while (stringsArray[i].IndexOf(prefix) != 0)
+                while (!stringsArray[i].StartsWith(prefix, stringComp))
                 {
                     prefix = prefix.Substring(0, prefix.Length - 1);
-                    if (prefix == "") return "";
+                    if (prefix == "")
+                        return "";
                 }
             }
 
@@ -510,25 +511,39 @@ namespace NmkdUtils
         {
             if (s.IsEmpty())
                 return false;
-            // file:// URIs
-            if (Uri.TryCreate(s, UriKind.Absolute, out var uri) && uri.IsFile)
-                return true;
-            // Windows drive- or UNC-based paths
+
             if (!Path.IsPathFullyQualified(s))
                 return false;
+
+            if (Uri.TryCreate(s, UriKind.Absolute, out var uri) && uri.IsFile)
+                return true;
+
             return s.IndexOfAny(Path.GetInvalidPathChars()) == -1;
         }
 
-        public static string GetClosestFuzzyMatch(IEnumerable<string> strings, string target, int threshold = 90)
+        /// <summary>
+        /// Returns the string with the highest fuzzy match score against <paramref name="findStr"/>, with a minimum score <paramref name="threshold"/>.
+        /// </summary>
+        public static string GetClosestFuzzyMatch(IEnumerable<string> strings, string findStr, int threshold = 90)
         {
-            if (strings == null || !strings.Any() || target.IsEmpty())
+            if (strings == null || !strings.Any() || findStr.IsEmpty())
                 return null;
 
-            return strings.Where(s => s.FuzzyMatches(target, threshold)).OrderByDescending(s => s.GetFuzzyMatchScore(target)).FirstOrDefault(); // Return the first (best) match
+            return strings.Where(s => s.FuzzyMatches(findStr, threshold)).OrderByDescending(s => s.GetFuzzyMatchScore(findStr)).FirstOrDefault(); // Return the first (best) match
         }
 
-        public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true)
+        /// <summary> <inheritdoc cref="ReplaceLinesFuzzy(string, string, out List{ValueTuple{string, int}}, string, int, bool, bool)"/> </summary>
+        public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false) 
+            => ReplaceLinesFuzzy(s, find, out _, replace, threshold, mustMatchWordCount, log);
+
+        /// <summary>
+        /// Splits a string into lines and replaces each line with <paramref name="replace"/> if the line fuzzy-matches <paramref name="find"/> with a score of at least <paramref name="threshold"/>. <br/>
+        /// If <paramref name="mustMatchWordCount"/> is true, the line must have the same number of words as <paramref name="find"/> to be replaced. <br/>
+        /// </summary>
+        public static string ReplaceLinesFuzzy(string s, string find, out List<(string Line, int Score)> scores, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false)
         {
+            scores = [];
+
             if (s.IsEmpty() || find.IsEmpty())
                 return s;
 
@@ -540,13 +555,16 @@ namespace NmkdUtils
                     continue;
 
                 var score = lines[i].GetFuzzyMatchScore(find);
+                scores.Add((lines[i], score));
 
                 if (score >= threshold)
                 {
                     if (mustMatchWordCount && lines[i].GetWordCount() != find.GetWordCount())
                         continue;
 
-                    Logger.Log($"Replacing line '{lines[i]}' with '{replace}' (fuzzy match {score}%)");
+                    if(log)
+                        Logger.Log($"Replacing line '{lines[i]}' with '{replace}' (fuzzy match {score}%)");
+
                     lines[i] = replace;
                 }
             }
