@@ -38,11 +38,6 @@ namespace NmkdUtils
             };
         }
 
-        public static int RoundToNearestMultiple(this int number, int x)
-        {
-            return (int)Math.Round((double)number / x) * x;
-        }
-
         /// <summary>
         /// Rounds <paramref name="value"/> to the specified <paramref name="mult"/>. If <paramref name="roundUp"/> is true, rounds up, if false, rounds down. If null, rounds to the nearest multiple.
         /// </summary>
