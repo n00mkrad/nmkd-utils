@@ -63,7 +63,7 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> <inheritdoc cref="Try(Action, Action{Exception}, bool?)"/> </summary>/>
+        /// <summary> <inheritdoc cref="Try(Action, Action{Exception}, bool?, string, bool)"/> </summary>
         public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool printTrace = false)
         {
             if (tryAction == null)
