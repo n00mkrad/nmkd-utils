@@ -480,12 +480,15 @@ namespace NmkdUtils
         }
 
         /// <summary>
-        /// Removes text in parentheses, including the parentheses themselves. Optionally removes the leading space before the parentheses.
+        /// Removes text in parentheses, including the parentheses themselves. Optionally removes the leading space before the parentheses. <br/>
+        /// With <paramref name="convertBrackets"/>, brackets are converted to parentheses first.
         /// </summary>
-        public static string RemoveTextInParentheses(this string s, bool includeLeadingSpace = true)
+        public static string RemoveTextInParentheses(this string s, bool withLeadingSpace = false, bool convertBrackets = false)
         {
-            string pattern = includeLeadingSpace ? @"\s*\([^()]*\)" : @"\([^()]*\)";
-            return Regex.Replace(s, pattern, "");
+            if (convertBrackets)
+                s = s.Replace('[', '(').Replace(']', ')');
+
+            return s.RegexReplace(withLeadingSpace ? Regexes.TextInParenthesesLeadingSpaces : Regexes.TextInParentheses);
         }
 
         /// <summary>
@@ -610,13 +613,37 @@ namespace NmkdUtils
             return string.Concat(Enumerable.Repeat(s, count));
         }
 
-        /// <summary> Like replace, but using a RegEx pattern. </summary>
-        public static string ReplaceRegex(this string s, string pattern, string replacement = "")
+        /// <summary> Like replace, but using a RegEx pattern string. </summary>
+        public static string RegexReplace(this string s, string pattern, string replacement = "")
         {
             if (s.IsEmpty() || pattern.IsEmpty())
                 return s;
 
             return Regex.Replace(s, pattern, replacement);
+        }
+
+        /// <summary> Like replace, but using a RegEx pattern object. </summary>
+        public static string RegexReplace(this string s, Regex pattern, string replacement = "")
+        {
+            if (s.IsEmpty())
+                return s;
+
+            return pattern.Replace(s, replacement);
+        }
+
+        /// <summary>
+        /// Extended Replace method, does not error if <paramref name="find"/> is empty, can be case-insensitive with <paramref name="ci"/>, <br/>
+        /// can replace only the first occurence with <paramref name="firstOnly"/>.
+        /// </summary>
+        public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false)
+        {
+            if (s.IsEmpty() || find.IsEmpty())
+                return s;
+
+            if (firstOnly)
+                return s.ReplaceFirst(find, replace, caseIns: true);
+            else
+                return s.Replace(find, replace, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
 
         private static string TrimSide(this string s, string trimStr, bool ci, bool fromStart)
