@@ -50,7 +50,7 @@ namespace NmkdUtils
         {
             { Level.Debug, ConsoleColor.DarkBlue },
             { Level.Verbose, ConsoleColor.DarkGray },
-            { Level.Info, ConsoleColor.White },
+            { Level.Info, ConsoleColor.Gray },
             { Level.Warning, ConsoleColor.Yellow },
             { Level.Error, ConsoleColor.Red },
         };
