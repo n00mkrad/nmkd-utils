@@ -325,7 +325,7 @@ namespace NmkdUtils
         /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"./> </summary>
         public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true)
         {
-            string? value = "";
+            string value = "";
 
             if (checkSysVars)
             {
@@ -342,12 +342,7 @@ namespace NmkdUtils
                 value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Process);
             }
 
-            if (value.IsEmpty())
-            {
-                return fallbackValue;
-            }
-
-            return value;
+            return value.IsEmpty() ? fallbackValue : value;
         }
 
         public static ProcessPriorityClass GetOwnProcessPriority()
