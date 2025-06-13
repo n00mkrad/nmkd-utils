@@ -101,8 +101,8 @@ namespace NmkdUtils
             if (height <= 8.0f)
                 height = image.Height * (float)height;
 
-            int w = width.RoundToInt().RoundToNearestMultiple(2);
-            int h = ((float)height).RoundToInt().RoundToNearestMultiple(2);
+            int w = width.RoundToInt().RoundToMultiple(2);
+            int h = ((float)height).RoundToInt().RoundToMultiple(2);
             image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black }));
 
             if (blur > 0)
@@ -133,18 +133,22 @@ namespace NmkdUtils
             return Convert.ToBase64String(ms.ToArray());
         }
 
-        public static Image CreateTextImage(string text, int width, int height, string fontName = "Arial", int fontSize = 36, bool invert = false)
+        public static float GetFontSizeByTargetHeight(int targetHeightPx, string fontName = "Arial", FontStyle style = FontStyle.Regular, string sampleText = "The Quick Brown Fox Jumps Over The Lazy Dog.")
         {
-            Font font = SystemFonts.CreateFont(fontName, fontSize, FontStyle.Regular);
+            Font font = SystemFonts.CreateFont(fontName, 1f, style);
+            var size = TextMeasurer.MeasureSize(sampleText, new TextOptions(font));
+            float fontSize = targetHeightPx / size.Height;
+            return fontSize;
+        }
+
+        public static Image CreateTextImage(string text, int width, int height, string fontName = "Arial", float maxFontSize = 100f, bool invert = false)
+        {
+            float fontSize = GetFontSizeByTargetHeight(height);
+            Font font = SystemFonts.CreateFont(fontName, fontSize > maxFontSize ? maxFontSize : fontSize, FontStyle.Regular);
+            var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
+            height = height.Clamp(0, (textSize.Height * 1.85f).RoundToInt());
             var image = new Image<Rgb24>(width, height, Color.Black);
-
-            var textOptions = new RichTextOptions(font)
-            {
-                Origin = new PointF(width / 2f, height / 2f),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
+            var textOptions = new RichTextOptions(font) { Origin = new PointF(width / 2f, height / 2f), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             image.Mutate(ctx => ctx.DrawText(textOptions, text, Color.White));
 
             if (invert)
@@ -163,7 +167,7 @@ namespace NmkdUtils
             {
                 for (int i = 0; i < images.Count; i++)
                 {
-                    var padImg = CreateTextImage($"Paragraph {i + 1}", images.Max(i => i.Width), (images.Average(i => i.Height) / 3d).RoundToInt(), "Arial", 44);
+                    var padImg = CreateTextImage($"Paragraph {i + 1}", images.Max(i => i.Width), (images.Average(i => i.Height) / 3d).RoundToInt(), "Arial");
                     padImages.Add(padImg);
                 }
             }
