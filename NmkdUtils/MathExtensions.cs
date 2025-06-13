@@ -1,15 +1,8 @@
-﻿
-
-namespace NmkdUtils
+﻿namespace NmkdUtils
 {
     public static class MathExtensions
     {
-        public enum Rounding
-        {
-            Normal,
-            Up,
-            Down
-        }
+        public enum Rounding { Normal, Up, Down }
 
         public static int RoundToInt(this double d, Rounding method = Rounding.Normal, int divBy = 1)
         {
@@ -86,5 +79,8 @@ namespace NmkdUtils
         {
             return value >= min && value <= max;
         }
+
+        /// <summary> <inheritdoc cref="MathUtils.GetPercent{T}(IEnumerable{T}, Func{T, bool})"/> </summary>
+        public static float GetPercent<T>(this IEnumerable<T> collection, Func<T, bool> predicate) => MathUtils.GetPercent(collection, predicate);
     }
 }
