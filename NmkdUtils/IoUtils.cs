@@ -1,6 +1,9 @@
 ﻿using Microsoft.VisualBasic.FileIO;
 using System.Drawing;
+using System.IO;
+using System.Text;
 using SearchOption = System.IO.SearchOption;
+using static NmkdUtils.CodeUtils;
 
 namespace NmkdUtils
 {
@@ -691,6 +694,101 @@ namespace NmkdUtils
             }
 
             return "";
+        }
+
+        /// <summary>
+        /// Gets the file extension from a path or FileInfo object, removing the dot and lowercasing it if <paramref name="lower"/> and <paramref name="stripDot"/> are true, respectively.
+        /// </summary>
+        public static string GetExt(object file, bool lower = true, bool stripDot = true)
+        {
+            string ext = file is FileInfo fi ? fi.Extension : Path.GetExtension((string)file);
+
+            if (stripDot)
+                ext = ext.TrimStart('.');
+
+            if (lower)
+                ext = ext.ToLowerInvariant();
+
+            return ext;
+        }
+
+        public static bool ExtIsInList(object file, params string[] validExts) => ExtIsInList(file, validExts.AsEnumerable());
+
+        public static bool ExtIsInList(object file, IEnumerable<string> validExts)
+        {
+            validExts = validExts.Select(ext => ext.TrimStart('.').ToLowerInvariant()).ToArray();
+            string ext = GetExt(file, lower: true, stripDot: true);
+            return validExts.Contains(ext);
+        }
+
+        public static List<FileInfo> SortByPathHierarchy(List<FileInfo> files, bool dirsFirst = true) => files.OrderBy(f => f, new PathHierarchyComparer(dirsFirst)).ToList();
+
+        private class PathHierarchyComparer : IComparer<FileSystemInfo>
+        {
+            private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
+            private readonly bool _foldersFirst;
+
+            public PathHierarchyComparer(bool dirsFirst) { _foldersFirst = dirsFirst; }
+
+            public int Compare(FileSystemInfo x, FileSystemInfo y)
+            {
+                if (ReferenceEquals(x, y)) return 0;
+                if (x is null) return -1;
+                if (y is null) return 1;
+
+                var segA = x.FullName.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var segB = y.FullName.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                int minLen = Math.Min(segA.Length, segB.Length);
+                for (int i = 0; i < minLen; i++)
+                {
+                    int cmp = Comparer.Compare(segA[i], segB[i]);
+                    if (cmp != 0) return cmp;
+                }
+
+                if (_foldersFirst)
+                {
+                    bool aIsDir = x is DirectoryInfo;
+                    bool bIsDir = y is DirectoryInfo;
+                    if (aIsDir && !bIsDir) return -1;
+                    if (!aIsDir && bIsDir) return 1;
+                }
+
+                if (segA.Length != segB.Length) return segA.Length.CompareTo(segB.Length);
+                return Comparer.Compare(segA[^1], segB[^1]);
+            }
+        }
+
+        private static void BuildFileTree(StringBuilder sb, DirectoryInfo dir, string indent, bool includeFiles)
+        {
+            var entries = dir.GetDirectories().Cast<FileSystemInfo>().OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            if (includeFiles)
+            {
+                entries.AddRange(dir.GetFiles().Cast<FileSystemInfo>().OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase));
+            }
+            for (int i = 0; i < entries.Count; i++)
+            {
+                bool isLast = i == entries.Count - 1;
+                FileSystemInfo entry = entries[i];
+                string pointer = isLast ? "└── " : "├── ";
+                sb.AppendLine(indent + pointer + entry.Name);
+                if (entry is DirectoryInfo subDir)
+                {
+                    string newIndent = indent + (isLast ? "    " : "│   ");
+                    BuildFileTree(sb, subDir, newIndent, includeFiles);
+                }
+            }
+        }
+
+        public static bool IsTextFile(string path, int sampleSize = 4096)
+        {
+            byte[] buffer = new byte[sampleSize];
+            int read;
+
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read))
+                read = fs.Read(buffer, 0, sampleSize);
+
+            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+            return buffer.Take(read).None(b => b == 0) || Try(() => utf8.GetString(buffer, 0, read), logEx: false).IsNotEmpty(); // Check for null bytes, then try UTF-8 decode
         }
     }
 }
