@@ -317,12 +317,9 @@ namespace NmkdUtils
         }
 
         /// <summary> Count how many instances (including self, unless <paramref name="excludeSelf"/> is true) of this executable are running. </summary>
-        public static int CountExecutableInstances(string exePath = "", bool excludeSelf = false)
-        {
-            return GetExecutableInstances(exePath, excludeSelf).Count;
-        }
+        public static int CountExecutableInstances(string exePath = "", bool excludeSelf = false) => GetExecutableInstances(exePath, excludeSelf).Count;
 
-        /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"./> </summary>
+        /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"/>. </summary>
         public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true)
         {
             string value = "";

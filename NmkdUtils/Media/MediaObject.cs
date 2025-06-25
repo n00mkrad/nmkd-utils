@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using static NmkdUtils.Media.MediaData;
 using static NmkdUtils.Media.MediaObject;
 using Stream = NmkdUtils.Media.Stream;
+using static NmkdUtils.CodeUtils;
 
 namespace NmkdUtils.Media
 {
@@ -97,7 +98,7 @@ namespace NmkdUtils.Media
         {
             var firstFrameJson = FfmpegUtils.GetFfprobeJson(File.FullName, args: "-v error -show_frames -read_intervals \"%+#1\" -select_streams v:0 -print_format json")["frames"]?.FirstOrDefault();
 
-            if(CodeUtils.Assert(firstFrameJson == null, () => Logger.LogErr($"Failed to get frame data for {File.Name}")))
+            if(Assert(firstFrameJson == null, () => Logger.LogErr($"Failed to get frame data for {File.Name}")))
                 return;
 
             string s = firstFrameJson!.ToString();

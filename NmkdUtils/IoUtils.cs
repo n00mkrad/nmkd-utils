@@ -133,7 +133,7 @@ namespace NmkdUtils
 
             if (dryRun)
             {
-                Logger.Log($"Would delete file {path}");
+                Logger.Log($"Would {(recycle ? "recycle" : "delete")} file {path}");
                 return;
             }
 
@@ -174,6 +174,12 @@ namespace NmkdUtils
         /// </summary>
         private static void DeleteDirectory(string path, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
+            if (dryRun)
+            {
+                Logger.Log($"Would {(recycle ? "recycle" : "delete")} directory {path}");
+                return;
+            }
+
             if (recycle)
             {
                 RecycleDir(path, logEx: ignoreExceptions != false);
@@ -203,19 +209,19 @@ namespace NmkdUtils
                 DeleteDirectory(path: dir, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun);
             }
 
-            if (!dryRun)
-            {
-                try
-                {
-                    Directory.Delete(path);
-                }
-                catch (Exception ex)
-                {
-                    if (ignoreExceptions == false)
-                        throw;
+            if (dryRun)
+                return;
 
-                    Logger.Log($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == null || !ex.Message.Contains("The directory is not empty"));
-                }
+            try
+            {
+                Directory.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                if (ignoreExceptions == false)
+                    throw;
+
+                Logger.Log($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == null || !ex.Message.Contains("The directory is not empty"));
             }
         }
 
@@ -231,7 +237,7 @@ namespace NmkdUtils
                 using StreamReader reader = new StreamReader(fileStream);
                 return reader.ReadToEnd();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Logger.Log(ex, $"Failed to read file '{path}'");
                 return "";

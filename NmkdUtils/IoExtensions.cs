@@ -42,7 +42,7 @@ namespace NmkdUtils
             return size;
         }
 
-        /// <summary> Gets the combined size of all files in <paramref name="directory"/> in bytes, multithreaded. If <paramref name="threads"/> is <=0, the amount of CPU threads will be used </summary>
+        /// <summary> Gets the combined size of all files in <paramref name="directory"/> in bytes, multithreaded. If <paramref name="threads"/> is 0 or negative, the amount of CPU threads will be used </summary>
         public static long GetSize(this DirectoryInfo directory, int threads = -1)
         {
             if (threads <= 0)

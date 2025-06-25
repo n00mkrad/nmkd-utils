@@ -181,9 +181,7 @@ namespace NmkdUtils
             return values.Join(" - ").Trim();
         }
 
-        /// <summary>
-        /// Returns a string containing the current platform, elevation status, and build timestamp.
-        /// <returns></returns>
+        /// <summary> Returns a string containing the current platform, elevation status, and build timestamp. </summary>
         public static string ProgramInfo(string buildTimestamp)
         {
             string platform = OsUtils.IsWindows ? "[Windows]" : "[Linux/Other]";
@@ -192,9 +190,7 @@ namespace NmkdUtils
             return $"{platform}{elevated}{buildTime}";
         }
 
-        /// <summary>
-        /// Formats a strack trace to be more readable and compact
-        /// <returns></returns>
+        /// <summary> Formats a strack trace to be more readable and compact </summary>
         public static string NicerStackTrace(string trace)
         {
             if (trace.IsEmpty())
@@ -219,9 +215,7 @@ namespace NmkdUtils
             return trace;
         }
 
-        /// <summary>
-        /// Removes internal compiler-generated types and local function names from a stack trace.
-        /// <returns></returns>
+        /// <summary> Removes internal compiler-generated types and local function names from a stack trace. </summary>
         public static List<string> CleanStackTrace(List<string> lines, int removeParamNamesIfLongerThan = 120)
         {
             var cleaned = new List<string>();

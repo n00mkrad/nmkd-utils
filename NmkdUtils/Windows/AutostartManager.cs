@@ -54,7 +54,7 @@ namespace NmkdUtils.Windows
         }
 
         /// <summary>
-        /// Toggles autostart by creating or removing a shortcut in the user's Startup folder.<br/> The shortcut name is inferred from this application's executable name.
+        /// Toggles autostart by creating or removing a shortcut in the user's Startup folder. <br/> The shortcut name is inferred from this application's executable name.
         /// </summary>
         public static void SetAutostart(bool autostart)
         {
