@@ -25,12 +25,23 @@ namespace NmkdUtils
             return JObject.Parse(json);
         }
 
-        public static JObject PostJson<T>(this HttpClient client, string url, T payload, out TimeSpan time)
+        public static JObject PostJson<T>(this HttpClient client, string url, T payload, out TimeSpan time, int attempts = 3)
         {
             var sw = Stopwatch.StartNew();
-            var result = PostJson(client, url, payload);
+
+            for(int i = 0; i < attempts; i++)
+            {
+                var result = PostJson(client, url, payload);
+
+                if(result != null)
+                {
+                    time = sw.Elapsed;
+                    return result;
+                }
+            }
+
             time = sw.Elapsed;
-            return result;
+            return null;
         }
 
         public static JObject PostJson<T>(this HttpClient client, string url, T payload)
