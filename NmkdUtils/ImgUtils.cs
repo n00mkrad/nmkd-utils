@@ -149,8 +149,8 @@ namespace NmkdUtils
             if (height <= 8.0f)
                 height = image.Height * (float)height;
 
-            int w = width.RoundToInt().RoundToMultiple(2);
-            int h = ((float)height).RoundToInt().RoundToMultiple(2);
+            int w = width.Round().RoundToMultiple(2);
+            int h = ((float)height).Round().RoundToMultiple(2);
             image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black }));
 
             Logger.Log($"Resized image to {image.Width}x{image.Height}", logLvl);
@@ -305,7 +305,7 @@ namespace NmkdUtils
             float fontSize = GetFontSizeByTargetHeight(height);
             Font font = SystemFonts.CreateFont(fontName, fontSize > maxFontSize ? maxFontSize : fontSize, FontStyle.Regular);
             var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
-            height = height.Clamp(0, (textSize.Height * 1.45f).RoundToInt());
+            height = height.Clamp(0, (textSize.Height * 1.45f).Round());
             var image = new Image<Rgb24>(width, height, whiteBg ? Color.White : Color.Black);
             var textOptions = new RichTextOptions(font) { Origin = new PointF(width / 2f, height / 2f), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             image.Mutate(ctx => ctx.DrawText(textOptions, text, whiteBg ? Color.Black : Color.White));
@@ -381,36 +381,9 @@ namespace NmkdUtils
             return hash;
         }
 
-        /// <summary> Debug helper to benchmark <see cref="GetAutoCrop"/> on a folder of images. </summary>
-        public static void TestAutoCrop()
-        {
-            string path = @"C:\Users\nmkd\Downloads\subsTest\crop2";
-            var sw = Stopwatch.StartNew();
-            var files = IoUtils.GetFilesSorted(path, false, "*.png").Where(f => !f.EndsWith("crop.png")).ToList();
-            var times = new ConcurrentBag<double>();
-
-            Parallel.ForEach(files, new ParallelOptions() { MaxDegreeOfParallelism = Environment.ProcessorCount }, file =>
-            {
-                var img = GetImage(file);
-
-                if (img == null)
-                    return;
-
-                var sw2 = Stopwatch.StartNew();
-                GetAutoCrop(img, apply: true);
-                times.Add(sw2.Elapsed.TotalMilliseconds);
-                string outPath = Path.ChangeExtension(file, ".crop.png");
-                img.Save(outPath, Format.Png, overwrite: true, dispose: true);
-                Debug.WriteLine($"Saved image to {Path.GetFileName(outPath)}");
-            });
-
-            // Sorted dict by file name
-            Logger.Log($"Processed {times.Count}, avg crop time {FormatUtils.Time(times.Average())}, total: {sw.Format()}");
-        }
-
         /// <summary> 
         /// Returns the rectangle containing anything that's not pure black. <br/> If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
-        /// Subsampling can be controlled with <paramref name="scale"/>, additional padding with <paramref name="padding"/>. <br/>
+        /// Subsampling can be controlled with <paramref name="scale"/>. <br/>
         /// </summary>
         public static Rectangle GetAutoCrop(object input, int paddingW = 0, int paddingH = 0, bool apply = false, float scale = 0.2f, bool dispose = false)
         {
@@ -449,10 +422,10 @@ namespace NmkdUtils
             }
 
             // Undo downsampling
-            var x = (minX / scale).RoundToInt();
-            var y = (minY / scale).RoundToInt();
-            int w = ((maxX - minX + 1) / scale).RoundToInt();
-            int h = ((maxY - minY + 1) / scale).RoundToInt();
+            var x = (minX / scale).Round();
+            var y = (minY / scale).Round();
+            int w = ((maxX - minX + 1) / scale).Round();
+            int h = ((maxY - minY + 1) / scale).Round();
 
             // Add padding
             x = Math.Max(0, x - paddingW);
@@ -465,6 +438,42 @@ namespace NmkdUtils
 
             img.DisposeIf(dispose);
             return new Rectangle(x, y, w, h);
+        }
+
+        /// <summary>
+        /// <inheritdoc cref="CountNonBlackPixels(object, float, int, bool)"/> for a list of inputs. <br/> 
+        /// </summary>
+        public static Dictionary<int, int> CountNonBlackPixelsList (List<object> inputs, float scale = 0.25f, int minValue = 1, bool dispose = false, int? threads = null)
+        {
+            threads ??= Environment.ProcessorCount;
+            var results = new ConcurrentDictionary<int, int>();
+
+            inputs.ParallelForEach(input =>
+            {
+                int index = inputs.IndexOf(input);
+                int count = CountNonBlackPixels(input, scale, minValue, dispose);
+                results[index] = count;
+            });
+
+            return results.ToDictionary();
+        }
+
+        /// <summary> Counts non-black pixels in an image, using a grayscale sum threshold of <paramref name="minValue"/>. </summary>
+        public static int CountNonBlackPixels(object input, float scale = 0.25f, int minValue = 1, bool dispose = false)
+        {
+            var img = GetImage(input);
+            int nonBlackCount = 0;
+
+            img.ProcessPixels(scale, p =>
+            {
+                if (p.GetRgbSum() >= minValue)
+                {
+                    nonBlackCount++;
+                }
+            });
+
+            img.DisposeIf(dispose);
+            return (int)(nonBlackCount / scale);
         }
 
         /// <summary> Release ImageSharp memory and run garbage collection. </summary>

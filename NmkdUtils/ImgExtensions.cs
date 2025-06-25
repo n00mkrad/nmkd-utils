@@ -34,4 +34,33 @@ public static class ImgExtensions
 
         image.Dispose();
     }
+
+    /// <summary> Shortcut to run an action with every pixel, optionally with subsampling (<paramref name="scale"/>). </summary>
+    public static void ProcessPixels(this Image image, float scale, Action<Rgba32> pixelAction)
+    {
+        using var tempImg = image.CloneAs<Rgba32>();
+
+        if (scale < 0.999f)
+        {
+            tempImg.Resize(scale, scale);
+        }
+
+        tempImg.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < tempImg.Height; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < tempImg.Width; x++)
+                {
+                    pixelAction(row[x]);
+                }
+            }
+        });
+    }
+    /// <inheritdoc cref="ProcessPixels(Image, float, Action{Rgba32})"/>
+    public static void ProcessPixels(this Image image, Action<Rgba32> pixelAction)
+        => ProcessPixels(image, 1.0f, pixelAction);
+
+    /// <summary> Gets the sum of the RGB values of a pixel. </summary>
+    public static int GetRgbSum(this Rgba32 px) => px.R + px.G + px.B;
 }
