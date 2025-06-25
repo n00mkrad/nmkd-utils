@@ -97,9 +97,9 @@ namespace NmkdUtils
         }
 
         /// <summary> Add <paramref name="item"/> to list if <paramref name="condition"/> is true </summary>
-        public static void AddIf<T>(this IList<T>? list, T item, bool condition = true)
+        public static void AddIf<T>(this IList<T>? list, T? item, bool condition = true)
         {
-            if (list == null || !condition)
+            if (list == null || !condition || item == null)
                 return;
 
             list.Add(item);
@@ -184,6 +184,8 @@ namespace NmkdUtils
         /// <inheritdoc cref="OrderByFreq{T}(IEnumerable{T}, out int)"/>
         public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list)
             => OrderByFreq(list, out _);
+
+        public static List<object> ToObjectList(this IEnumerable source) => source.Cast<object>().ToList();
 
         #endregion
 
