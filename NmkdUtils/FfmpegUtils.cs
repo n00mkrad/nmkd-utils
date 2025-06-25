@@ -10,6 +10,7 @@ namespace NmkdUtils
         public static int FfprobeCacheMisses = 0;
         private static Dictionary<string, string> _ffprobeOutputCache = []; // Key = File hash, Value = Command output
 
+        /// <summary> Run ffprobe on <paramref name="path"/> and return the raw JSON output. </summary>
         public static string GetFfprobeOutput(string path, string? executable = null, string args = "-v error -print_format json -show_format -show_streams -show_chapters", bool allowCaching = true)
         {
             if (CodeUtils.Assert(!File.Exists(path), () => Logger.LogErr($"File not found: {executable}")))
@@ -37,6 +38,7 @@ namespace NmkdUtils
             return cmdResult.StdOut;
         }
 
+        /// <summary> Convenience wrapper for <see cref="GetFfprobeOutput"/> that parses the JSON. </summary>
         public static JObject GetFfprobeJson(string path, string? executable = null, string args = "-v error -show_format -show_streams -show_chapters", bool allowCaching = true)
         {
             string json = GetFfprobeOutput(path, executable, $"-print_format json {args}", allowCaching);
@@ -76,6 +78,7 @@ namespace NmkdUtils
             return kbps;
         }
 
+        /// <summary> Parse ffprobe tags and return the duration as a <see cref="TimeSpan"/>. </summary>
         public static TimeSpan GetTimespanFromFfprobe(Dictionary<string, string> tags, int fallbackMs = 0)
         {
             if (tags == null)
@@ -85,6 +88,7 @@ namespace NmkdUtils
             return GetTimespanFromFfprobe(d, fallbackMs);
         }
 
+        /// <summary> Convert a ffprobe duration string to a <see cref="TimeSpan"/>. </summary>
         public static TimeSpan GetTimespanFromFfprobe(string ffprobeDuration, int fallbackMs = 0)
         {
             var fallback = TimeSpan.FromMilliseconds(fallbackMs);

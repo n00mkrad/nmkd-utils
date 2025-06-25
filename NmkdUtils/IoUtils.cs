@@ -298,6 +298,7 @@ namespace NmkdUtils
             return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
         }
 
+        /// <summary> Calculate size of a directory in bytes. </summary>
         public static long GetDirSize(string path, bool recursive = true, IEnumerable<string>? patterns = null)
         {
             IEnumerable<string> files = Directory.EnumerateFiles(path, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
@@ -324,6 +325,7 @@ namespace NmkdUtils
         }
 
 
+        /// <summary> Get size of a file or directory, null on failure. </summary>
         public static long? GetPathSize(string path, bool recursive = true)
         {
             try
@@ -378,6 +380,7 @@ namespace NmkdUtils
             Irrelevant
         }
 
+        /// <summary> Validate a file path depending on <paramref name="existMode"/>. </summary>
         public static bool ValidateFilePath(string path, ExistMode existMode = ExistMode.Irrelevant)
         {
             if (existMode == ExistMode.MustExist && !File.Exists(path))
@@ -392,6 +395,7 @@ namespace NmkdUtils
             return true;
         }
 
+        /// <summary> Validate a directory path depending on <paramref name="existMode"/>. </summary>
         public static bool ValidateDirPath(string path, ExistMode existMode = ExistMode.Irrelevant)
         {
             if (existMode == ExistMode.MustExist && !Directory.Exists(path))
@@ -406,6 +410,7 @@ namespace NmkdUtils
             return true;
         }
 
+        /// <summary> Validate a file or directory path. </summary>
         public static bool ValidatePath(string path, PathType type = PathType.Irrelevant, ExistMode existMode = ExistMode.Irrelevant, bool validate = true, int maxLength = 220)
         {
             if (path.IsEmpty() || path.Trim().Length > maxLength)
@@ -428,6 +433,7 @@ namespace NmkdUtils
             return isDirectory == true ? ValidateDirPath(path, existMode) : ValidateFilePath(path, existMode);
         }
 
+        /// <summary> Check if a path is syntactically valid. </summary>
         public static bool PathIsValid(string path, bool allowRelativePaths = true)
         {
             bool isValid = true;

@@ -19,28 +19,33 @@ namespace NmkdUtils
 
         /// <inheritdoc cref="Assert(Func{bool}, Action, Action)"/>
         public static bool Assert(bool failureCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => failureCondition, failureAction, successAction);
+        /// <summary> Assert and log a warning if <paramref name="failureCondition"/> is true. </summary>
         public static bool AssertWarn(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
         {
             bool a = Assert(() => failureCondition, failureAction, successAction);
             Logger.LogConditional(msg, a, Logger.Level.Warning);
             return a;
         }
+        /// <summary> Assert and log an error if <paramref name="failureCondition"/> is true. </summary>
         public static bool AssertErr(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
         {
             bool a = Assert(() => failureCondition, failureAction, successAction);
             Logger.LogConditional(msg, a, Logger.Level.Error);
             return a;
         }
+        /// <summary> Inverse <see cref="Assert(Func{bool}, Action, Action)"/> for validation logic. </summary>
         public static bool Validate(Func<bool> requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => requiredCondition() == false, failureAction, successAction);
+        /// <summary> <inheritdoc cref="Validate(Func{bool}, Action, Action)"/> </summary>
         public static bool Validate(bool requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => !requiredCondition, failureAction, successAction);
 
-        // Function to set a variable via ref only if a given condition is met
+        /// <summary> Set <paramref name="variable"/> to <paramref name="value"/> if <paramref name="condition"/> is true. </summary>
         public static void SetIf<T>(ref T variable, T value, Func<bool> condition)
         {
             if (condition())
                 variable = value;
         }
 
+        /// <summary> Set <paramref name="variable"/> to <paramref name="value"/> if <paramref name="value"/> is not null. </summary>
         public static void SetIfNotNull<T>(ref T variable, object? value)
         {
             if (value != null)

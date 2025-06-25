@@ -26,6 +26,7 @@ public static class ImgExtensions
     /// <summary> Calculates the Rec. 709 luminance of a pixel. </summary>
     public static float GetRec709Luminance(this Rgba32 px) => 0.2126f * (px.R / 255f) + 0.7152f * (px.G / 255f) + 0.0722f * (px.B / 255f);
 
+    /// <summary> Dispose <paramref name="image"/> when <paramref name="condition"/> is true. </summary>
     public static void DisposeIf(this Image image, bool condition)
     {
         if (!condition || image == null)
