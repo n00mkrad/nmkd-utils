@@ -705,5 +705,14 @@ namespace NmkdUtils
         }
 
         public static bool MatchesRegex(this string s, Regex regex) => MatchesRegex(s, regex, out _);
+
+        public static string AppendIf(this string s, string text, Func<bool> condition)
+        {
+            if (s.IsEmpty() || !condition())
+                return s;
+
+            return s + text;
+        }
+        public static string AppendIf(this string s, string text, bool condition) => s.AppendIf(text, () => condition);
     }
 }
