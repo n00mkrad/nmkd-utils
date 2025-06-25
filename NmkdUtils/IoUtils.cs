@@ -117,39 +117,25 @@ namespace NmkdUtils
         }
 
 
-        /// <summary> Sends a file to the recycle bin </summary>
-        public static bool RecycleFile(string path)
-        {
-            try
-            {
-                FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        /// <summary> Sends a file to the recycle bin. Returns success bool. </summary>
+        private static bool RecycleFile(string path, bool logEx = false)
+            => Try(() => FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin), logEx: logEx);
 
-        /// <summary> Sends a folder to the recycle bin </summary>
-        public static bool RecycleDir(string path)
-        {
-            try
-            {
-                FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        /// <summary> Sends a folder to the recycle bin. Returns success bool. </summary>
+        public static bool RecycleDir(string path, bool logEx = false)
+            => Try(() => FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin), logEx: logEx);
 
-        /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Does nothing if <paramref name="dryRun"/> is true. </summary>
+        /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Only logs the file if <paramref name="dryRun"/> is true. </summary>
         public static void DeleteFile(string path, bool recycle = false, bool dryRun = false, Logger.Level logLvl = Logger.Level.Verbose)
         {
-            if (dryRun)
+            if (!File.Exists(path))
                 return;
+
+            if (dryRun)
+            {
+                Logger.Log($"Would delete file {path}");
+                return;
+            }
 
             if (recycle && OsUtils.IsWindows)
             {
@@ -163,50 +149,37 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Does nothing if <paramref name="dryRun"/> is true. </summary>
-        public static void DeletePath(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
+        /// <summary> Deletes a file or directory (or sends it to recycle bin if <paramref name="recycle"/> is true). Only logs the files that would be deleted if <paramref name="dryRun"/> is true. </summary>
+        public static void Delete(string path, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
-            try
+            if (File.Exists(path))
             {
-                // Check if the path exists
-                if (!File.Exists(path) && !Directory.Exists(path))
-                {
-                    Logger.Log($"Does not exist: {path}", Logger.Level.Verbose);
-                    return; // Path does not exist
-                }
-
-                if (Directory.Exists(path))
-                {
-                    if (recycle)
-                    {
-                        RecycleDir(path);
-                    }
-                    else
-                    {
-                        // Is a directory, so call DeleteDirectory and add its file results to deletedFiles
-                        DeleteDirectory(path: path, ignoreExceptions: ignoreExceptions, recycle: recycle, dryRun: dryRun);
-                    }
-                }
-                else if (File.Exists(path))
-                {
-                    DeleteFile(path, recycle, dryRun);
-                }
+                DeleteFile(path, recycle, dryRun);
             }
-            catch (Exception ex)
+            else if (Directory.Exists(path))
             {
-                if (!ignoreExceptions)
-                {
-                    throw; // Rethrow the exception if not ignoring them
-                }
-                Logger.LogConditional($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
+                DeleteDirectory(path, ignoreExceptions, recycle, dryRun);
             }
-
-            Logger.Log((dryRun ? $"Would have deleted {path}" : $"Deleted {path}"), Logger.Level.Verbose);
+            else
+            {
+                Logger.Log($"Does not exist: {path}", Logger.Level.Verbose);
+                return;
+            }
         }
 
-        private static void DeleteDirectory(string path, bool ignoreExceptions = true, bool recycle = false, bool dryRun = false)
+        /// <summary>
+        /// Deletes a directory and its contents or sends it to recycle bin. <br/>
+        /// If <paramref name="ignoreExceptions"/> is true, exceptions are ignored fully, if null, they are only logged, if false, they are thrown. <br/>
+        /// If <paramref name="dryRun"/> is true, no files are actually deleted, only logged.
+        /// </summary>
+        private static void DeleteDirectory(string path, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
-            // Get all files and directories in the directory
+            if (recycle)
+            {
+                RecycleDir(path, logEx: ignoreExceptions != false);
+                return;
+            }
+
             string[] files = Directory.GetFiles(path);
             string[] directories = Directory.GetDirectories(path);
 
@@ -218,11 +191,10 @@ namespace NmkdUtils
                 }
                 catch (Exception ex)
                 {
-                    if (!ignoreExceptions)
-                    {
+                    if (ignoreExceptions == false)
                         throw;
-                    }
-                    Logger.Log($"Failed to delete {file}: {ex.Message.Remove($"'{file}' ")}", Logger.Level.Warning);
+
+                    Logger.Log($"Failed to delete {file}: {ex.Message.Remove($"'{file}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == false);
                 }
             }
 
@@ -236,101 +208,34 @@ namespace NmkdUtils
                 try
                 {
                     Directory.Delete(path);
-                    // No FileInfo for directories since only files are tracked
                 }
                 catch (Exception ex)
                 {
-                    if (!ignoreExceptions)
-                    {
+                    if (ignoreExceptions == false)
                         throw;
-                    }
-                    Logger.LogConditional($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", !ex.Message.Contains("The directory is not empty"), Logger.Level.Warning);
+
+                    Logger.Log($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == null || !ex.Message.Contains("The directory is not empty"));
                 }
             }
         }
 
-        /// <summary> Delete a path if it exists. Works for files and directories. Returns success status. </summary>
-        // public static bool TryDeleteIfExists(string path)
-        // {
-        //     try
-        //     {
-        //         if ((IsPathDirectory(path) == true && !Directory.Exists(path)) || (IsPathDirectory(path) == false && !File.Exists(path)))
-        //             return true;
-        // 
-        //         DeleteIfExists(path);
-        //         return true;
-        //     }
-        //     catch
-        //     {
-        //         try
-        //         {
-        //             SetAttributes(path);
-        //             DeleteIfExists(path);
-        //             return true;
-        //         }
-        //         catch (Exception e)
-        //         {
-        //             Console.WriteLine($"TryDeleteIfExists: Error trying to delete {path}: {e.Message}", true);
-        //             return false;
-        //         }
-        //     }
-        // }
-        // 
-        // public static bool DeleteIfExists(string path, bool log = false)
-        // {
-        //     if (log)
-        //         Console.WriteLine($"DeleteIfExists({path})", true);
-        // 
-        //     if (IsPathDirectory(path) == false && File.Exists(path))
-        //     {
-        //         File.Delete(path);
-        //         return true;
-        //     }
-        // 
-        //     if (IsPathDirectory(path) == true && Directory.Exists(path))
-        //     {
-        //         Directory.Delete(path, true);
-        //         return true;
-        //     }
-        // 
-        //     return false;
-        // }
-        // 
-        // public static bool SetAttributes(string rootDir, FileAttributes newAttributes = FileAttributes.Normal, bool recursive = true)
-        // {
-        //     try
-        //     {
-        //         GetFileInfosSorted(rootDir, recursive).ToList().ForEach(x => x.Attributes = newAttributes);
-        //         return true;
-        //     }
-        //     catch (Exception ex)
-        //     {
-        //         return false;
-        //     }
-        // }
-
         /// <summary> More reliable alternative to File.ReadAllLines, should work for files that are being accessed from another process </summary>
-        public static List<string> ReadFileLinesSafe(string path)
+        public static List<string> ReadTextLines(string path, bool ommitEmptyLines = false) => ReadTextFile(path).GetLines(ommitEmptyLines);
+
+        /// <summary> More reliable alternative to File.ReadAllText, should work for files that are being accessed from another process </summary>
+        public static string ReadTextFile(string path)
         {
-            // Ensure that other processes can read and write to the file while it is open
             try
             {
-                var lines = new List<string>();
                 using FileStream fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using StreamReader reader = new StreamReader(fileStream);
-                while (!reader.EndOfStream)
-                {
-                    string line = reader.ReadLine();
-                    lines.Add(line);
-                }
-                return lines.Where(l => l != null).ToList();
+                return reader.ReadToEnd();
             }
-            catch (IOException e)
+            catch(Exception ex)
             {
-                Console.WriteLine("An error occurred while reading the file: " + e.Message);
+                Logger.Log(ex, $"Failed to read file '{path}'");
+                return "";
             }
-
-            return new List<string>();
         }
 
         /// <summary> Transfer "Created" and "Last Modified" timestamps from <paramref name="pathSource"/> to <paramref name="pathTarget"/> </summary>

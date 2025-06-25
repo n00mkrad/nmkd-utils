@@ -198,7 +198,7 @@ namespace NmkdUtils
 
                 if (tempScript.IsNotEmpty())
                 {
-                    IoUtils.DeletePath(tempScript);
+                    IoUtils.Delete(tempScript);
                 }
 
                 string logMsg = cfg.PrintExitCode ? $"Finished (Code {result.ExitCode})." : "";
