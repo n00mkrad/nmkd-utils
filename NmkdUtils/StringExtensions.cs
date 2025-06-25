@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -14,9 +13,12 @@ namespace NmkdUtils
         }
 
         /// <summary> Shortcut for string.IsNullOrWhiteSpace </summary>
-        public static bool IsEmpty(this string? s)
+        public static bool IsEmpty(this string? s, bool whitespaceCountsAsEmpty = true)
         {
-            return string.IsNullOrWhiteSpace(s);
+            if (whitespaceCountsAsEmpty)
+                return string.IsNullOrWhiteSpace(s);
+
+            return string.IsNullOrEmpty(s);
         }
 
         public static string ReplaceEmpty(this string s, string replaceWith = "N/A")
@@ -58,16 +60,27 @@ namespace NmkdUtils
             return s;
         }
 
-
-        [GeneratedRegex("\r\n|\r|\n")] private static partial Regex SplitIntoLinesPattern();
         public static string[] SplitIntoLines(this string str, bool ignoreEmpty = false)
         {
-            var split = SplitIntoLinesPattern().Split(str);
+            string[] split = Regexes.LineBreaks.Split(str);
             return ignoreEmpty ? split.Where(line => line.IsNotEmpty()).ToArray() : split;
         }
         public static string[] SplitIntoLinesOut(this string str, out string[] lines, bool ignoreEmpty = false)
         {
             lines = SplitIntoLines(str, ignoreEmpty);
+            return lines;
+        }
+
+        /// <summary> Splits a string into lines, works for Windows/Linux style line endings. <paramref name="removeEmpty"/> will not return empty lines. </summary>
+        public static List<string> GetLines(this string str, bool removeEmpty = false)
+        {
+            var split = Regexes.LineBreaks.Split(str);
+            return removeEmpty ? split.Where(line => line.IsNotEmpty()).ToList() : split.ToList();
+        }
+        /// <inheritdoc cref="GetLines(string, bool)"/>
+        public static List<string> GetLines(this string str, out List<string> lines, bool removeEmpty = false)
+        {
+            lines = str.GetLines(removeEmpty);
             return lines;
         }
 
@@ -85,31 +98,6 @@ namespace NmkdUtils
             }
 
             return parts.Length > 1;
-        }
-
-        /// <summary>
-        /// Split a string by a <paramref name="separator"/> into 2 parts, <paramref name="split1"/> and <paramref name="split2"/>. The return bool is success/failure.<br/>
-        /// If <paramref name="allowMore"/> is true, a split result with more than 2 entries does not count as failure.
-        /// </summary>
-        public static bool Split2(this string str, string separator, out string split1, out string split2, string defaultVal1 = "", string defaultVal2 = "", bool allowMore = false)
-        {
-            split1 = defaultVal1;
-            split2 = defaultVal2;
-
-            if (str.IsEmpty())
-                return false;
-
-            var split = str.Split(separator);
-
-            if (split.Length < 2)
-                return false;
-
-            if (!allowMore && split.Length > 2)
-                return false;
-
-            split1 = split[0];
-            split2 = split[1];
-            return true;
         }
 
         /// <summary>
@@ -132,13 +120,13 @@ namespace NmkdUtils
             if (s == null)
                 return [];
 
-            var result = new List<string>();
+            List<string> result = new List<string>();
             int startIndex = 0;
             while (startIndex <= s.Length)
             {
                 int matchIndex = -1;
                 string matchSep = null;
-                foreach (var sep in separators)
+                foreach (string sep in separators)
                 {
                     if (string.IsNullOrEmpty(sep)) continue;
                     int idx = s.IndexOf(sep, startIndex, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -172,12 +160,11 @@ namespace NmkdUtils
         /// <summary> Remove anything from a string that is not a number, optionally allowing scientific notation (<paramref name="allowScientific"/>) </summary>
         public static string TrimNumbers(this string s, bool allowDotComma = false, bool allowScientific = false)
         {
-            if (!allowDotComma)
-                s = Regex.Replace(s, $"[^0-9.{(allowScientific ? "e" : "")}]", "");
-            else
-                s = Regex.Replace(s, $"[^.,0-9-{(allowScientific ? "e" : "")}]", "");
+            Regex rgx = allowDotComma
+            ? (allowScientific ? Regexes.NoNumberAllowCommaAndSci : Regexes.NoNumberAllowComma)
+            : (allowScientific ? Regexes.NoNumberAllowSci : Regexes.NoNumber);
 
-            return s.Trim();
+            return s.RegexReplace(rgx).Trim();
         }
 
         public static bool GetIntOut(this string? str, out int value, bool allowScientificNotation = false)
@@ -329,7 +316,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces a string if it starts with the <paramref name="find"/> string. Ignores later occurences unless <paramref name="firstOccurenceOnly"/> is false. </summary>
-        public static string ReplaceAtStart(this string s, string find, string replace, bool firstOccurenceOnly = true, bool caseIns = false)
+        public static string ReplaceAtStart(this string s, string find, string replace = "", bool firstOccurenceOnly = true, bool caseIns = false)
         {
             if (s.IsEmpty() || !s.StartsWith(find))
                 return s;
@@ -348,14 +335,14 @@ namespace NmkdUtils
 
             if (unlessLineStartsWith != null)
             {
-                foreach (var exceptionStr in unlessLineStartsWith)
+                foreach (string exceptionStr in unlessLineStartsWith)
                 {
                     s = s.Replace($"\n{exceptionStr}", $"<<<NO_LINE_BREAK>>>{exceptionStr}");
                 }
             }
 
             string pattern = @"(?:\r\n|\r|\n)+"; // matches one or more occurrences of \r\n (Windows), \n (Unix), or \r (older Macs)
-            var result = Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
+            string result = Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
 
             if (unlessLineStartsWith != null)
             {
@@ -464,11 +451,10 @@ namespace NmkdUtils
             return StringUtils.WildcardMatch(pattern, s, 0, 0, ignoreCase);
         }
 
-        /// <summary> Checks if a string matches all wildcard <paramref name="patterns"/> </summary>
-        public static bool MatchesAllWildcards(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false)
-        {
-            return patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
-        }
+        /// <summary> Checks if a string matches all of the provided wildcard <paramref name="patterns"/> </summary>
+        public static bool MatchesAllWildcards(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
+        /// <summary> Checks if a string matches any of the provided wildcard <paramref name="patterns"/> </summary>
+        public static bool MatchesAnyWildcard(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.Any(p => s.MatchesWildcard(p, ignoreCase, orContains));
 
         /// <summary> Capitalizes the first char of a string. </summary>
         public static string CapitalizeFirstChar(this string s)
@@ -542,7 +528,7 @@ namespace NmkdUtils
 
         public static bool IsOneOf(this string s, bool caseSensitive, params object[] strings)
         {
-            var strComp = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            StringComparison strComp = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
             if (strings.Length == 0)
                 return false;
@@ -561,7 +547,7 @@ namespace NmkdUtils
             return Regex.Replace(input, @"\\u([0-9A-Fa-f]{4})", m =>
             {
                 // parse the hex value, convert to its char, and return
-                var code = int.Parse(m.Groups[1].Value, NumberStyles.HexNumber);
+                int code = int.Parse(m.Groups[1].Value, NumberStyles.HexNumber);
                 return ((char)code).ToString();
             });
         }
@@ -579,9 +565,9 @@ namespace NmkdUtils
             if (input.IsEmpty())
                 return [];
 
-            var regex = alsoMatchNumbers ? _wordsNumbersRegex : _wordsRegex;
-            var matches = regex.Matches(input);
-            var words = new string[matches.Count];
+            Regex regex = alsoMatchNumbers ? _wordsNumbersRegex : _wordsRegex;
+            MatchCollection matches = regex.Matches(input);
+            string[] words = new string[matches.Count];
 
             for (int i = 0; i < matches.Count; i++)
             {
@@ -637,7 +623,7 @@ namespace NmkdUtils
         /// </summary>
         public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false)
         {
-            if (s.IsEmpty() || find.IsEmpty())
+            if (s.IsEmpty(false) || find.IsEmpty(false))
                 return s;
 
             if (firstOnly)
@@ -651,7 +637,7 @@ namespace NmkdUtils
             if (s.IsEmpty())
                 return s;
 
-            var comparison = ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            StringComparison comparison = ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
             if (fromStart)
             {
@@ -692,10 +678,32 @@ namespace NmkdUtils
                 s = s.Trim();
             }
 
-            var score = FuzzySharp.Fuzz.WeightedRatio(s, comparisonStr);
+            int score = FuzzySharp.Fuzz.WeightedRatio(s, comparisonStr);
             // if(score > 70)
             //     Debug.WriteLine($"Fuzz score; Checking for '{comparisonStr}' in '{s}': {score}");
             return score;
         }
+
+        /// <summary> Shortcut for string.Format </summary>
+        public static string Format(this string s, params object[] values)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            return string.Format(s, values);
+        }
+
+        public static bool MatchesRegex(this string s, Regex regex, out List<Match> matches)
+        {
+            matches = [];
+
+            if (s.IsEmpty())
+                return false;
+
+            matches = regex.Matches(s).ToList();
+            return matches.Any();
+        }
+
+        public static bool MatchesRegex(this string s, Regex regex) => MatchesRegex(s, regex, out _);
     }
 }

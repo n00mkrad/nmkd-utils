@@ -3,6 +3,7 @@
 using System.Collections.Frozen;
 using System.Text;
 using System.Text.RegularExpressions;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace NmkdUtils
 {
@@ -179,34 +180,27 @@ namespace NmkdUtils
                 return s;
 
             if (htmlTags && curlyBraceTags)
-                return Regex.Replace(s, @"<[^>]+>|{[^}]+}", "", RegexOptions.Compiled);
+                return s = s.RegexReplace(Regexes.TagsHtmlOrCurlyBraces);
 
             if (htmlTags)
-                s = Regex.Replace(s, @"<[^>]+>", "", RegexOptions.Compiled);
+                s = s.RegexReplace(Regexes.TagsHtml);
 
             if (curlyBraceTags)
-                s = Regex.Replace(s, @"\{[^}]*\}", "", RegexOptions.Compiled);
+                s = s.RegexReplace(Regexes.TagsCurlyBraces);
 
             if (htmlOnlyRemSize)
-                return Regex.Replace(s, "size=\"\\d+\"", "", RegexOptions.Compiled);
+                return s.RegexReplace(Regexes.TagsHtmlSize);
 
             return s;
         }
 
-        public static string RemoveEmojis(string s)
-        {
-            if (s.IsEmpty())
-                return s;
-
-            Regex emojiRegex = new Regex(@"(?:(\ud83c[\udde6-\uddff]){2}|([\#\*0-9]\u20e3)|(?:\u00a9|\u00ae|[\u2000-\u3300]|[\ud83c-\ud83e][\ud000-\udfff])(?:(?:\ud83c[\udffb-\udfff])?(?:\ud83e[\uddb0-\uddb3])?(?:\ufe0f?\u200d(?:[\u2000-\u3300]|[\ud83c-\ud83e][\ud000-\udfff])\ufe0f?)?)*)+", RegexOptions.Compiled);
-            return emojiRegex.Replace(s, "");
-        }
+        public static string RemoveEmojis(string s) => s.RegexReplace(Regexes.Emojis);
 
         /// <summary>
         /// Breaks long lines based on <paramref name="targetLength"/>. The hard limit is <paramref name="targetLength"/> * <paramref name="tolerance"/>. <br/>
-        /// <paramref name="windowFraction"/> controls how “wide” the prioritized split zone around the exact middle is (e.g. 0.25 = 50% of the total length).
+        /// <paramref name="windowFraction"/> controls how "wide" the prioritized split zone around the exact middle is (e.g. 0.25 = 50% of the total length).
         /// </summary>
-        public static string[] SplitLongLines(string[] lines, int targetLength = 45, float tolerance = 1.25f, double windowFraction = 0.2)
+        public static string[] SplitLongLines(string[] lines, int targetLength = 45, float tolerance = 1.25f, double windowFraction = 0.2, List<string>? exclusionWildcards = null)
         {
             if (lines == null)
                 return lines;
@@ -214,10 +208,12 @@ namespace NmkdUtils
             if (windowFraction <= 0 || windowFraction >= 0.5)
                 throw new ArgumentOutOfRangeException(nameof(windowFraction), "windowFraction must be > 0 and < 0.5");
 
+            exclusionWildcards ??= [];
+
             var result = new List<string>();
             foreach (var line in lines)
             {
-                if (string.IsNullOrEmpty(line) || line.Length <= (tolerance * tolerance).RoundToInt())
+                if (line.IsEmpty() || line.Length <= (tolerance * tolerance).RoundToInt() || line.MatchesAnyWildcard(exclusionWildcards))
                 {
                     result.Add(line);
                     continue;
@@ -362,7 +358,7 @@ namespace NmkdUtils
         }
 
         /// <summary>
-        /// Checks a string for repeated words and limits the number of repetitions to <paramref name="maxRepetitions"/> while trying to preserve punctuation. <br/>
+        /// Checks a string for repeated words and limits the number of repetitions to <paramref name="maxRepetitions"/> while trying to preserve punctuation.
         /// </summary>
         public static List<string> LimitWordReps(IEnumerable<string> lines, int maxRepetitions = 4)
         {
@@ -416,7 +412,7 @@ namespace NmkdUtils
             }
 
             if (original != normalizedLines.Join(" ⏎ ").Trim())
-                Logger.Log($"Deduped words:\n{original}\n{normalizedLines.Join(" ⏎ ").Trim()}");
+                Logger.Log($"Deduped words:\n{original}\n{normalizedLines.Join(" ⏎ ").Trim()}", Logger.Level.Verbose);
 
             return normalizedLines;
 
@@ -430,6 +426,8 @@ namespace NmkdUtils
                 return (core, punct);
             }
         }
+        /// <summary> <inheritdoc cref="LimitWordReps(IEnumerable{string}, int)"/> </summary>
+        public static string LimitWordReps(string s, int maxRepetitions = 4) => LimitWordReps([s], maxRepetitions)[0];
 
         /// <summary>
         /// Trims any run of consecutive identical characters in <paramref name="s"/> so that no character repeats more than <paramref name="threshold"/> times in a row.
@@ -489,6 +487,21 @@ namespace NmkdUtils
             return sb.ToString();
         }
 
+        public static string SentenceDedupe(string s, int minLength = 10)
+        {
+            var match = Regexes.DuplicateText.Match(s);
+
+            if (!match.Success)
+                return s;
+
+            var dedup = match.Groups[1].Value.Trim();
+
+            if (dedup.Length >= minLength)
+                return dedup;
+
+            return s; // If the deduped sentence is shorter than minLength, return the original string
+        }
+
         /// <summary> Checks if a string is a valid Base64-encoded string. </summary>
         public static bool IsBase64(string s)
         {
@@ -533,14 +546,14 @@ namespace NmkdUtils
         }
 
         /// <summary> <inheritdoc cref="ReplaceLinesFuzzy(string, string, out List{ValueTuple{string, int}}, string, int, bool, bool)"/> </summary>
-        public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false) 
+        public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false)
             => ReplaceLinesFuzzy(s, find, out _, replace, threshold, mustMatchWordCount, log);
 
         /// <summary>
         /// Splits a string into lines and replaces each line with <paramref name="replace"/> if the line fuzzy-matches <paramref name="find"/> with a score of at least <paramref name="threshold"/>. <br/>
         /// If <paramref name="mustMatchWordCount"/> is true, the line must have the same number of words as <paramref name="find"/> to be replaced. <br/>
         /// </summary>
-        public static string ReplaceLinesFuzzy(string s, string find, out List<(string Line, int Score)> scores, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false)
+        public static string ReplaceLinesFuzzy(string s, string find, out List<(string Line, int Score)> scores, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool dedupeWords = false, bool ignoreSpaces = false, bool log = false)
         {
             scores = [];
 
@@ -549,12 +562,24 @@ namespace NmkdUtils
 
             var lines = s.SplitIntoLines();
 
-            for(int i = 0; i < lines.Length; i++)
+            for (int i = 0; i < lines.Length; i++)
             {
                 if (lines[i] == find || lines[i].IsEmpty())
                     continue;
 
-                var score = lines[i].GetFuzzyMatchScore(find);
+                string line = lines[i];
+
+                if (dedupeWords)
+                {
+                    line = LimitWordReps([line], 1)[0];
+                }
+
+                if (ignoreSpaces)
+                {
+                    line = line.Replace(" ");
+                }
+
+                var score = line.GetFuzzyMatchScore(find);
                 scores.Add((lines[i], score));
 
                 if (score >= threshold)
@@ -562,7 +587,7 @@ namespace NmkdUtils
                     if (mustMatchWordCount && lines[i].GetWordCount() != find.GetWordCount())
                         continue;
 
-                    if(log)
+                    if (log)
                         Logger.Log($"Replacing line '{lines[i]}' with '{replace}' (fuzzy match {score}%)");
 
                     lines[i] = replace;
@@ -570,6 +595,159 @@ namespace NmkdUtils
             }
 
             return lines.Join("\n");
+        }
+
+        /// <summary> Takes a list of strings that should be the same length, returns the amount of chars that do not match casing </summary>
+        public static int CountCaseMismatches(List<string> list)
+        {
+            if (list == null || list.Count < 2)
+                return 0;
+
+            int minLen = list.Min(s => s.Length);
+            int mismatchCount = 0;
+
+            for (int i = 0; i < minLen; i++)
+            {
+                int upper = 0;
+                int lower = 0;
+                foreach (string s in list)
+                {
+                    char c = s[i];
+                    if (char.IsUpper(c)) upper++;
+                    else if (char.IsLower(c)) lower++;
+                }
+
+                bool majorityUpper = upper > lower;
+                foreach (string s in list)
+                {
+                    char c = s[i];
+                    if (char.IsLetter(c) && (char.IsUpper(c) != majorityUpper))
+                    {
+                        mismatchCount++;
+                    }
+                }
+            }
+
+            return mismatchCount;
+        }
+
+        /// <summary> Splits a command line string into individual arguments, respecting quotes and escape characters. </summary>
+        public static IEnumerable<string> SplitArgs(string commandLine)
+        {
+            var result = new StringBuilder();
+            var quoted = false;
+            var escaped = false;
+            var started = false;
+            var allowcaret = false;
+            for (int i = 0; i < commandLine.Length; i++)
+            {
+                var chr = commandLine[i];
+
+                if (chr == '^' && !quoted)
+                {
+                    if (allowcaret)
+                    {
+                        result.Append(chr);
+                        started = true;
+                        escaped = false;
+                        allowcaret = false;
+                    }
+                    else if (i + 1 < commandLine.Length && commandLine[i + 1] == '^')
+                    {
+                        allowcaret = true;
+                    }
+                    else if (i + 1 == commandLine.Length)
+                    {
+                        result.Append(chr);
+                        started = true;
+                        escaped = false;
+                    }
+                }
+                else if (escaped)
+                {
+                    result.Append(chr);
+                    started = true;
+                    escaped = false;
+                }
+                else if (chr == '"')
+                {
+                    quoted = !quoted;
+                    started = true;
+                }
+                else if (chr == '\\' && i + 1 < commandLine.Length && commandLine[i + 1] == '"')
+                {
+                    escaped = true;
+                }
+                else if (chr == ' ' && !quoted)
+                {
+                    if (started) yield return result.ToString();
+                    result.Clear();
+                    started = false;
+                }
+                else
+                {
+                    result.Append(chr);
+                    started = true;
+                }
+            }
+
+            if (started) yield return result.ToString();
+        }
+
+        /// <summary> Checks each word in a string for repeated parts at the end and remove them, e.g. "somewherewhere" -> "somewhere". </summary>
+        public static string RemoveWordPartRep(string s, bool max2Char = false)
+        {
+            s = s.RegexReplace(Regexes.ApostropheRepetition, "'$1");
+            var tokens = Regexes.TokenizeWords.Matches(s).Cast<Match>().Select(m => m.Value).ToList(); // Tokenize into words and non-words
+
+            for (int i = 0; i < tokens.Count; i++)
+            {
+                if (!Regexes.MatchTokenizedWords.IsMatch(tokens[i]))
+                    continue; // Not a word
+
+                try
+                {
+                    string word = tokens[i];
+                    var matches = (max2Char ? Regexes.WordPartRepetition2Ch : Regexes.WordPartRepetition).Matches(word).ToList();
+
+                    if (matches.None())
+                        continue;
+
+                    string rep = matches.First().Groups.Values.Last().ToString(); // The repeated part
+                    tokens[i] = word.TrimEnd(rep) + rep; // Replace the word with the fixed version
+                }
+                catch { }
+            }
+
+            return string.Concat(tokens).Trim();
+        }
+
+        public static string SplitSentences(string s, bool allowRecurse = false, bool onlyIfOneLine = true)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            if (onlyIfOneLine && s.SplitIntoLines().Length > 1)
+                return s;
+
+            s = s.Replace("...", "…"); // Replace ellipsis with a single character for splitting
+            // Find index of the first sentence-ending punctuation
+            int index = s.IndexOfAny(['.', '!', '?', '…']);
+
+            if (index == -1 || index < 4)
+            {
+                // No sentence-ending punctuation found, return the original string
+                return s.Replace("…", "...");
+            }
+
+            // Split the string at the first sentence-ending punctuation
+            string firstSentence = s.Substring(0, index + 1).Trim();
+            string remainingText = s.Substring(index + 1).Trim();
+            // If there is remaining text, recursively split it
+            if (remainingText.IsEmpty() || remainingText.IsNotEmpty() && !allowRecurse)
+                return (firstSentence + (remainingText.Length >= 4 ? "\n" : " ") + remainingText).Replace("…", "...").Trim();
+
+            return (firstSentence + "\n" + SplitSentences(remainingText)).Replace("…", "...").Trim();
         }
     }
 }
