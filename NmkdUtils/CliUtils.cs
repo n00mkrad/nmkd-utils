@@ -8,7 +8,7 @@ namespace NmkdUtils
     {
         public static bool AllowInteraction = true;
 
-        /// <summary> Promtps the user and returns the entered text. </summary>
+        /// <summary> Prompts the user and returns the entered text. </summary>
         public static string ReadLine(string prompt, bool linebreak = false)
         {
             if(!AllowInteraction)
@@ -21,7 +21,7 @@ namespace NmkdUtils
             return $"{Console.ReadLine()}";
         }
 
-        /// <summary> Promtps the user and returns the entered text and runs an <paramref name="action"/> with the entered text (e.g. to assign the value). </summary>
+        /// <summary> Prompts the user and returns the entered text and runs an <paramref name="action"/> with the entered text (e.g. to assign the value). </summary>
         public static string ReadLine(string prompt, Action<string> action, bool linebreak = false)
         {
             if (!AllowInteraction)
@@ -32,7 +32,7 @@ namespace NmkdUtils
             return input;
         }
 
-        /// <summary> Promtps the user to enter a bool. If nothing was entered, returns <paramref name="defaultVal"/>. </summary>
+        /// <summary> Prompts the user to enter a bool. If nothing was entered, returns <paramref name="defaultVal"/>. </summary>
         public static bool ReadBool(string prompt, bool defaultVal = false, bool linebreak = false)
         {
             if (!AllowInteraction)
@@ -47,7 +47,7 @@ namespace NmkdUtils
             return input.IsOneOf(false, "y", "true", "yes", "1");
         }
 
-        /// <summary> Promtps the user to enter a bool and runs an <paramref name="action"/> with the entered bool (e.g. to assign the value). If nothing was entered, <paramref name="defaultVal"/> is used. </summary>
+        /// <summary> Prompts the user to enter a bool and runs an <paramref name="action"/> with the entered bool (e.g. to assign the value). If nothing was entered, <paramref name="defaultVal"/> is used. </summary>
         public static bool ReadBool(string prompt, Action<bool> action, bool defaultVal = false, bool linebreak = false)
         {
             if (!AllowInteraction)
@@ -58,7 +58,7 @@ namespace NmkdUtils
             return result;
         }
 
-        /// <summary> Promtps the user to enter an integer. If nothing was entered, returns <paramref name="defaultVal"/>. </summary>
+        /// <summary> Prompts the user to enter an integer. If nothing was entered, returns <paramref name="defaultVal"/>. </summary>
         public static int? ReadInt(string prompt, int? defaultVal = null, bool linebreak = false)
         {
             if (!AllowInteraction)
@@ -73,7 +73,7 @@ namespace NmkdUtils
             return input.GetInt();
         }
 
-        /// <summary> Promtps the user to enter an integer and runs an <paramref name="action"/> with the entered number (e.g. to assign the value). If nothing was entered, <paramref name="defaultVal"/> is used. </summary>
+        /// <summary> Prompts the user to enter an integer and runs an <paramref name="action"/> with the entered number (e.g. to assign the value). If nothing was entered, <paramref name="defaultVal"/> is used. </summary>
         public static int? ReadInt(string prompt, Action<int?> action, int? defaultVal = null, bool linebreak = false)
         {
             if (!AllowInteraction)

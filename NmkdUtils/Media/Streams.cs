@@ -47,7 +47,6 @@ namespace NmkdUtils.Media
             SideData = side_data_list;
         }
 
-        // TODO: Test
         public int GetRelativeIndex(MediaObject parent)
         {
             if (Type == CodecType.Video) return parent.VidStreams.IndexOf((VideoStream)this);
