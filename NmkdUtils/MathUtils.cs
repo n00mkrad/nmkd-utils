@@ -1,5 +1,7 @@
 ﻿
 
+using System.Drawing;
+
 namespace NmkdUtils
 {
     public class MathUtils
@@ -39,5 +41,16 @@ namespace NmkdUtils
             int matching = collection.Where(predicate).Count();
             return GetPercent(matching, all);
         }
+
+        /// <summary> Fits the <paramref name="original"/> size into the <paramref name="target"/> size, maintaining aspect ratio. </summary>
+        public static Size FitIntoArea(Size original, Size target)
+        {
+            float ratioX = (float)target.Width / original.Width;
+            float ratioY = (float)target.Height / original.Height;
+            float ratio = Math.Min(ratioX, ratioY);
+            return new Size((original.Width * ratio).Round(), (original.Height * ratio).Round());
+        }
+        public static Size FitIntoArea(int originalW, int originalH, int targetW, int targetH)
+                        => FitIntoArea(new Size(originalW, originalH), new Size(targetW, targetH));
     }
 }
