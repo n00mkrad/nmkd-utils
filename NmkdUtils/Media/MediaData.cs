@@ -176,8 +176,8 @@ namespace NmkdUtils.Media
                 if (contentLightDict != null)
                 {
                     var vals = contentLightDict.ToObject<Dictionary<string, string>>();
-                    MaxCll = new Fraction(vals.Get("max_content", "1")!).Float.RoundToInt();
-                    MaxFall = new Fraction(vals.Get("max_average", "1")!).Float.RoundToInt();
+                    MaxCll = new Fraction(vals.Get("max_content", "1")!).Float.Round();
+                    MaxFall = new Fraction(vals.Get("max_average", "1")!).Float.Round();
 
                     Logger.Log($"[Content light levels] MaxCLL: {MaxCll}, MaxFALL: {MaxFall}", Logger.Level.Verbose);
                 }

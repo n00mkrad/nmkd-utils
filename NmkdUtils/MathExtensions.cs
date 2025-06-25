@@ -20,7 +20,6 @@
             bool? roundFlag = method == Rounding.Normal ? null : method == Rounding.Up;
             return i.RoundToMultiple(divBy, roundFlag);
         }
-        public static int RoundToInt(this float f, Rounding method = Rounding.Normal, int divBy = 1) => ((double)f).RoundToInt(method, divBy);
         public static int Round(this float f, Rounding method = Rounding.Normal, int divBy = 1) => ((double)f).RoundToInt(method, divBy);
 
         /// <summary> Round a double to long using <paramref name="method"/>. </summary>

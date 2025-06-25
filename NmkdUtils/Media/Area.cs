@@ -53,7 +53,7 @@ namespace NmkdUtils.Media
             {
                 int diff = (minHeight * 2) - Height;
                 Height = minHeight;
-                Y -= (diff / 2f).RoundToInt(MathExtensions.Rounding.Up);
+                Y -= (diff / 2f).Round(MathExtensions.Rounding.Up);
             }
         }
 

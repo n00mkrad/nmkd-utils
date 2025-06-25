@@ -32,7 +32,7 @@ namespace NmkdUtils
         }
 
         /// <summary> <inheritdoc cref="GetPercent(float, float)"/> rounded to int </summary>
-        public static int GetPercentInt(float num1, float num2) => GetPercent(num1, num2).RoundToInt();
+        public static int GetPercentInt(float num1, float num2) => GetPercent(num1, num2).Round();
 
         /// <summary> Gets the percentage of entries in the <paramref name="collection"/> that match the given <paramref name="predicate"/> </summary>
         public static float GetPercent<T>(IEnumerable<T> collection, Func<T, bool> predicate)

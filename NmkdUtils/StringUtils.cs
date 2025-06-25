@@ -131,7 +131,7 @@ namespace NmkdUtils
             s = s.Low().Trim();
 
             if (s.Last() == 'm')
-                return (s.GetFloat() * 1000).RoundToInt();
+                return (s.GetFloat() * 1000).Round();
 
             return s.GetInt();
         }
@@ -213,7 +213,7 @@ namespace NmkdUtils
             var result = new List<string>();
             foreach (var line in lines)
             {
-                if (line.IsEmpty() || line.Length <= (tolerance * tolerance).RoundToInt() || line.MatchesAnyWildcard(exclusionWildcards))
+                if (line.IsEmpty() || line.Length <= (tolerance * tolerance).Round() || line.MatchesAnyWildcard(exclusionWildcards))
                 {
                     result.Add(line);
                     continue;
@@ -370,6 +370,7 @@ namespace NmkdUtils
                 var resultTokens = new List<string>();
                 string lastCore = null;
                 int count = 0;
+                bool lastHadPunctuation = false;
 
                 foreach (var token in tokens)
                 {
@@ -381,11 +382,12 @@ namespace NmkdUtils
                         resultTokens.Add(token);
                         lastCore = null;
                         count = 0;
+                        lastHadPunctuation = !string.IsNullOrEmpty(punct);
                         continue;
                     }
 
                     var normalizedCore = core.ToLowerInvariant();
-                    if (lastCore != null && normalizedCore == lastCore)
+                    if (lastCore != null && normalizedCore == lastCore && !lastHadPunctuation)
                     {
                         count++;
                         if (count <= maxRepetitions)
@@ -406,6 +408,8 @@ namespace NmkdUtils
                         count = 1;
                         resultTokens.Add(core + punct);
                     }
+
+                    lastHadPunctuation = !string.IsNullOrEmpty(punct);
                 }
 
                 normalizedLines.Add(string.Join(" ", resultTokens));

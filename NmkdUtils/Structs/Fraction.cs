@@ -62,7 +62,7 @@ namespace NmkdUtils.Structs
                 if (numbers.Length == 1)
                 {
                     float numFloat = numbers[0].GetFloat();
-                    int numInt = numFloat.RoundToInt();
+                    int numInt = numFloat.Round();
 
                     // If parsed float is equal to the rounded int, it's a whole number
                     if (numbers[0].GetFloat().EqualsRoughly(numInt))
@@ -81,14 +81,14 @@ namespace NmkdUtils.Structs
                     return;
                 }
 
-                Numerator = numbers[0].GetFloat().RoundToInt();
+                Numerator = numbers[0].GetFloat().Round();
                 Denominator = numbers[1].GetInt();
             }
             catch
             {
                 try
                 {
-                    Numerator = text.GetFloat().RoundToInt();
+                    Numerator = text.GetFloat().Round();
                     Denominator = 1;
                 }
                 catch
@@ -229,7 +229,7 @@ namespace NmkdUtils.Structs
         public static Fraction operator /(Fraction frac1, Fraction frac2) => new Fraction(frac1 * frac2.GetReciprocal()).GetReduced();
         public static Fraction operator *(Fraction frac, long mult) => new Fraction(frac.Numerator * mult, frac.Denominator).GetReduced();
         public static Fraction operator *(Fraction frac, double mult) => new Fraction((long)Math.Round(frac.Numerator * mult), frac.Denominator).GetReduced();
-        public static Fraction operator *(Fraction frac, float mult) => new Fraction((frac.Numerator * mult).RoundToInt(), frac.Denominator).GetReduced();
+        public static Fraction operator *(Fraction frac, float mult) => new Fraction((frac.Numerator * mult).Round(), frac.Denominator).GetReduced();
 
         public string GetString(string format = "0.#####")
         {
