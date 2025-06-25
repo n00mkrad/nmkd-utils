@@ -54,6 +54,13 @@ namespace NmkdUtils
             return value is not null && !value.Equals(fallback);
         }
 
+        /// <summary> Shortcut for ElementAtOrDefault with support for default/fallback value </summary>
+        public static T At<T>(this IEnumerable<T> source, int index, T fallback = default)
+        {
+            var result = source.ElementAtOrDefault(index);
+            return result is null ? fallback : result;
+        }
+
         /// <summary>
         /// Sets a <paramref name="key"/> to a <paramref name="value"/> in dictionary <paramref name="dict"/> if it is not null. If the key already exists, its value is updated.
         /// </summary>
@@ -88,6 +95,21 @@ namespace NmkdUtils
                 dict[key] = [value];
             }
         }
+
+        /// <summary> Add <paramref name="item"/> to list if <paramref name="condition"/> is true </summary>
+        public static void AddIf<T>(this IList<T>? list, T item, bool condition = true)
+        {
+            if (list == null || !condition)
+                return;
+
+            list.Add(item);
+        }
+
+        /// <summary> Add <paramref name="item"/> to list if it is not already in that list </summary>
+        public static void AddIfNotContains<T>(this IList<T>? list, T item) => list?.AddIf(item, !list.Contains(item));
+
+        /// <summary> <inheritdoc cref="AddIf{T}(IList{T}?, T, bool)"/> </summary>
+        public static void AddIf<T>(this IList<T>? list, T item, Func<bool> condition) => list.AddIf(item, condition());
 
         public static (List<T> Shuffled, int[] Permutation) ShuffleWithPermutation<T>(this IList<T> list, Random rng)
         {
@@ -135,27 +157,33 @@ namespace NmkdUtils
         /// <summary> Checks if a collection is not null and has at least 1 item </summary>
         public static bool HasItems<T>(this IEnumerable<T> source) => source?.Any() ?? false;
 
-        public static TProperty MostCommonBy<T, TProperty>(this List<T> list, Func<T, TProperty> selector)
-        {
-            if (list == null || list.Count == 0)
-                throw new InvalidOperationException("Sequence contains no elements");
+        /// <summary> Gets the single most common item using a <paramref name="selector"/> </summary>
+        public static T MostCommonBy<T, TProperty>(this IEnumerable<T> list, Func<T, TProperty> selector)
+            => list.MostCommonGroupBy(selector).FirstOrDefault();
 
-            return list.GroupBy(selector).MaxBy(g => g.Count()).Key;
+        /// <summary> Gets a list of most common items using a <paramref name="selector"/> </summary>
+        public static IEnumerable<T> MostCommonGroupBy<T, TProperty>(this IEnumerable<T> list, Func<T, TProperty> selector)
+        {
+            if (list == null || !list.Any())
+                return [];
+
+            return list.GroupBy(selector).MaxBy(g => g.Count())!;
         }
 
-        public static T MostCommon<T>(this IEnumerable<T> list, out int count)
+        /// <summary> Order a list by how common each item is (first = most common), preserving the original order within each group. </summary>
+        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list, out int mostCommonCount)
         {
-            if (list == null || list.Count() == 0)
-            {
-                count = 0;
-                return default;
-            }
+            mostCommonCount = 0;
+            if (list == null || !list.Any())
+                return [];
 
-            var grp = list.GroupBy(item => item).MaxBy(g => g.Count());
-            count = grp.Count();
-            return grp.Key;
+            var counts = list.GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count()); // Build a dictionary of counts
+            mostCommonCount = counts.Values.Max();
+            return list.OrderByDescending(x => counts[x]); // Stable sort original sequence by descending count
         }
-
+        /// <inheritdoc cref="OrderByFreq{T}(IEnumerable{T}, out int)"/>
+        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list)
+            => OrderByFreq(list, out _);
 
         #endregion
 
@@ -204,17 +232,32 @@ namespace NmkdUtils
             return [ex];
         }
 
-        public static List<string> GetMessages (this Exception ex)
+        public static List<string> GetMessages(this Exception ex)
         {
-            if (ex is AggregateException aggregate)
-                return aggregate.Flatten().InnerExceptions.Select(e => e.Message).ToList();
+            List<string> messages = [];
+            var exs = ex.Unwrap();
 
-            return [ex.Message];
+            foreach(var e in exs)
+            {
+                string msg = e.Message.TrimEnd('.');
+
+                if (e.InnerException == null)
+                {
+                    messages.Add(msg);
+                    continue;
+                }
+
+                msg = msg.Replace(" inner exception", " inner");
+                string inner = e.InnerException.Message.TrimEnd('.');
+                messages.Add(msg.ContainsCi(inner) ? msg : $"{msg} -> {inner}");
+            }
+
+            return messages;
         }
 
         public static void Log(this Exception ex, bool withTrace = true)
         {
-            foreach(var e in ex.Unwrap())
+            foreach (var e in ex.Unwrap())
             {
                 Logger.Log(e, printTrace: withTrace);
             }
@@ -246,6 +289,39 @@ namespace NmkdUtils
                 return $"Tuple[{t.Length}]{{{string.Join(joinSeparator, Enumerable.Range(0, t.Length).Select(i => t[i]?.ToStringFlexible(maxListItems: maxItemsRec)))}}}";
 
             return o.ToString();
+        }
+
+        public static void Log(this System.Diagnostics.Stopwatch sw, string note = "", bool reset = false)
+        {
+            Logger.Log($"{note} {sw.Format()}".Trim());
+
+            if (reset)
+                sw.Restart();
+        }
+
+        /// <summary> Shortcut for Parallel.ForEach with threads parameter </summary>
+        public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int threads = 0)
+        {
+            if (threads <= 0)
+                threads = Environment.ProcessorCount;
+            Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = threads }, action);
+        }
+
+        /// <summary> Cancels and disposes a <see cref="CancellationTokenSource"/> safely, ignoring any <see cref="ObjectDisposedException"/> that may occur. </summary>
+        public static void CancelAndDispose(this CancellationTokenSource? cts)
+        {
+            if (cts == null)
+                return;
+
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException) { /* Ignore */ }
+            finally
+            {
+                cts.Dispose();
+            }
         }
 
         #endregion
