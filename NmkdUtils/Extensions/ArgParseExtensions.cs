@@ -213,9 +213,18 @@ namespace NmkdUtils.Extensions
                     continue;
                 }
 
-                string v = opt.OptionValueType == OptionValueType.None ? "        " : " <VALUE>";
-                string desc = opt.Description.IsEmpty() ? "?" : opt.Description;
-                lines.Add($"{namesStr}{v} : {desc}");
+                string v = "";
+
+                if(opt.OptionValueType != OptionValueType.None)
+                {
+                    if(opt.Description.EndsWith("|INT")) v = " <INT>";
+                    else if(opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
+                    // else if(opt.Description.EndsWith("|STR")) v = " <STRING>";
+                    else v = " <VALUE>";
+                }
+
+                string desc = opt.Description.IsEmpty() ? "?" : opt.Description.Split('|')[0];
+                lines.Add($"{namesStr}{v.PadRight(8)} : {desc}");
 
                 if (newLines)
                 {
