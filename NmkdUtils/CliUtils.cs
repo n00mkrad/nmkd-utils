@@ -1,5 +1,7 @@
 ﻿
 
+using static NmkdUtils.Logger;
+
 namespace NmkdUtils
 {
     public class CliUtils
@@ -13,6 +15,7 @@ namespace NmkdUtils
                 return "";
 
             Logger.WaitForEmptyQueue();
+            Console.ResetColor();
             Console.Write(prompt + (linebreak ? Environment.NewLine : " "));
             Logger.LastLogMsgCon = prompt;
             return $"{Console.ReadLine()}";
@@ -96,5 +99,15 @@ namespace NmkdUtils
             Console.Write("\x1b[2J\x1b[H");
         }
 
+        /// <summary> Shows all available ConsoleColor values in the console with a sample text. </summary>
+        public static void PrintConsoleColors()
+        {
+            Log("Console Colors:");
+            foreach (ConsoleColor color in Enum.GetValues(typeof(ConsoleColor)))
+            {
+                Log(new Entry($"  This is ConsoleColor.{color}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.") { CustomColor = color, WriteToFile = false });
+            }
+            Console.ResetColor();
+        }
     }
 }
