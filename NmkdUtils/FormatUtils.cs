@@ -208,50 +208,82 @@ namespace NmkdUtils
 
                 if (split[i].StartsWith("   at ") && split[i].MatchesWildcard("* in *.cs:line*"))
                 {
-                    split[i] = Regex.Replace(split[i], @" in .+\\([^\\]+):line", " in $1 - Line");
+                    split[i] = Regex.Replace(split[i], @" in .+\\([^\\]+):line", " in $1 [") + "]";
                 }
 
                 string indentation = new string(' ', (i + 1) * 2);
                 split[i] = $"{indentation}{split[i]}";
             }
 
-            trace = CleanStackTrace(split.ToList()).Join(Environment.NewLine);
-            trace = trace.Replace("   at ", "");
+            trace = CleanStackTrace(split.ToList()).Join("\n");
             return trace;
         }
 
         /// <summary>
         /// Removes internal compiler-generated types and local function names from a stack trace.
         /// <returns></returns>
-        public static List<string> CleanStackTrace(List<string> lines)
+        public static List<string> CleanStackTrace(List<string> lines, int removeParamNamesIfLongerThan = 120)
         {
-            // var lines = rawStackTrace.SplitIntoLines(ignoreEmpty: true);
             var cleaned = new List<string>();
-            var displayClassPattern = new Regex(@"\.<\>c__DisplayClass\d+_\d+");
-            var localFuncPattern = new Regex(@"<(?<type>[^>]+)>g__(?<method>[^|]+)\|\d+");
+            string indent = " ";
 
             foreach (var line in lines)
             {
-                var step1 = displayClassPattern.Replace(line.Trim(), ""); // 1) strip out the generated display-class type
-                var step2 = localFuncPattern.Replace(step1, "${type}.${method}"); // 2) demangle local function names: "<VlmOcr>g__Sample|6" → "VlmOcr.Sample"
-                cleaned.Add(step2);
+                string clean = line.Trim().RegexReplace(Regexes.StackTraceDispClassGarbage); // strip out the generated display-class type
+                clean = clean.RegexReplace(Regexes.StackTraceLocalFuncGarbage, "${type}.${method}"); // demangle local function names: "<VlmOcr>g__Sample|6" → "VlmOcr.Sample"
+
+                if (clean.Length > removeParamNamesIfLongerThan)
+                {
+                    clean = clean.RegexReplace(Regexes.StackTraceLineParamName); // Remove names of parameters, leaving only types, if line too long
+                }
+
+                clean = clean.ReplaceAtStart("at", firstOccurenceOnly: true);
+
+                if (clean.MatchesWildcard("--- * ---")) // e.g. "--- End of stack trace from previous location ---"
+                {
+                    indent += "  ";
+                    continue; // Skip this line, but increase indentation
+                }
+
+                cleaned.Add(indent + clean);
             }
 
             return cleaned;
         }
 
+        /// <summary> Gets the last stack item that belongs to the current project (not a library). </summary>
         public static string LastProjectStackItem(string trace)
         {
             string appName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
             var split = trace.SplitIntoLines();
-            var line = split.Where(s => s.StartsWith($"   at {appName}.")).ToList();
+            var line = split.Where(s => s.Trim().StartsWith($"   at {appName}.")).ToList();
 
-            if (line.Count != 0)
+            if (line.Count < 1)
+                return "";
+
+            return line.First().Replace($"   at {appName}.", "").Split('(')[0].Trim();
+        }
+
+        public static string Exception(Exception ex, string note = "", bool withTrace = true)
+        {
+            string trace = ex.StackTrace ?? "";
+            string location = trace.IsEmpty() ? "Unknown Location" : LastProjectStackItem(trace);
+            var unwrapped = ex.Unwrap(); // Unwraps AggregateException, etc, if necessary
+
+            string locStr = location.IsEmpty() ? "" : $"[{location}] ";
+            // string typeStr = unwrapped.Count == 1 ? unwrapped[0].GetType().Name : "AggregateException";
+            string traceStr = withTrace ? "\n" + NicerStackTrace(trace) : "";
+            string noteStr = note.IsEmpty() ? "" : $"{note} - ";
+
+            if (unwrapped.Count == 1)
             {
-                return line.First().Replace($"   at {appName}.", "").Split('(')[0].Trim();
+                ex = unwrapped[0];
+                return $"{locStr}[{ex.GetType()}] {noteStr}{ex.Message.Trunc(330)}{traceStr}";
             }
-
-            return "";
+            else
+            {
+                return $"{locStr}[{ex.GetType()}] [{unwrapped.Count} Inner] {noteStr}{ex.Message.Trunc(320)}{traceStr}";
+            }
         }
     }
 }

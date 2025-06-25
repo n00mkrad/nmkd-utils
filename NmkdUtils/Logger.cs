@@ -148,11 +148,9 @@ namespace NmkdUtils
             }
         }
 
-        public static void Log(Exception e, string note = "", bool printTrace = true)
+        public static void Log(Exception e, string note = "", bool printTrace = true, bool condition = true)
         {
-            string trace = e.StackTrace ?? "";
-            string location = trace.IsEmpty() ? "Unknown Location" : FormatUtils.LastProjectStackItem(trace);
-            Log($"{(location.IsEmpty() ? "" : $"[{location}] ")}[{e.GetType()}] {(note.IsEmpty() ? "" : $"{note} - ")}{e.Message}{(printTrace ? Environment.NewLine + FormatUtils.NicerStackTrace(trace) : "")}", Level.Error);
+            Log(FormatUtils.Exception(e, note, printTrace), Level.Error, condition: () => condition);
         }
 
         public static void LogWrn(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
@@ -265,17 +263,6 @@ namespace NmkdUtils
             }
 
             Thread.Sleep(40);
-        }
-
-        /// <summary> Shows all available ConsoleColor values in the console with a sample text. </summary>
-        public static void PrintConsoleColors()
-        {
-            Log("Console Colors:");
-            foreach (ConsoleColor color in Enum.GetValues(typeof(ConsoleColor)))
-            {
-                Log(new Entry($"  This is ConsoleColor.{color}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.") { CustomColor = color, WriteToFile = false });
-            }
-            Console.ResetColor();
         }
     }
 
