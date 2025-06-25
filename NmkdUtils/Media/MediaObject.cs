@@ -12,6 +12,7 @@ namespace NmkdUtils.Media
         public FileInfo? File { get; set; }
         public List<Stream> Streams { get; set; } = [];
         public Format Format { get; set; } = new Format();
+        [JsonIgnore] public VideoStream Vid => (VideoStream)Streams.Where(s => s is VideoStream).FirstOrDefault();
         [JsonIgnore] public List<VideoStream> VidStreams => Streams.Where(s => s is VideoStream).Select(s => (VideoStream)s).ToList();
         [JsonIgnore] public List<AudioStream> AudStreams => Streams.Where(s => s is AudioStream).Select(s => (AudioStream)s).ToList();
         [JsonIgnore] public List<SubtitleStream> SubStreams => Streams.Where(s => s is SubtitleStream).Select(s => (SubtitleStream)s).ToList();
