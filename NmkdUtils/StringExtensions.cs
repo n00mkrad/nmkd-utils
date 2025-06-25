@@ -318,7 +318,7 @@ namespace NmkdUtils
         /// <summary> Replaces a string if it starts with the <paramref name="find"/> string. Ignores later occurences unless <paramref name="firstOccurenceOnly"/> is false. </summary>
         public static string ReplaceAtStart(this string s, string find, string replace = "", bool firstOccurenceOnly = true, bool caseIns = false)
         {
-            if (s.IsEmpty() || !s.StartsWith(find))
+            if (s.IsEmpty() || !s.StartsWith(find, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 return s;
 
             if (firstOccurenceOnly)

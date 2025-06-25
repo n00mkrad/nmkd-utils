@@ -190,7 +190,7 @@ namespace NmkdUtils
             return $"{platform}{elevated}{buildTime}";
         }
 
-        /// <summary> Formats a strack trace to be more readable and compact </summary>
+        /// <summary> Formats a stack trace to be more readable and compact </summary>
         public static string NicerStackTrace(string trace)
         {
             if (trace.IsEmpty())

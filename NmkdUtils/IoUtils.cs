@@ -38,12 +38,12 @@ namespace NmkdUtils
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"GetFilesSorted error: {ex.Message}", true);
+                Logger.Log(ex, "Failed to get files");
                 return [];
             }
         }
 
-        /// <summary> Get files sorted by name </summary>
+        /// <summary> Get files as FileInfo sorted by filename </summary>
         public static FileInfo[] GetFileInfosSorted(string path, bool recursive = false, string pattern = "*")
         {
             try
@@ -58,7 +58,7 @@ namespace NmkdUtils
             }
             catch (Exception ex)
             {
-                Logger.Log(ex, $"GetFileInfosSorted error");
+                Logger.Log(ex, $"Failed to get files");
                 return [];
             }
         }
