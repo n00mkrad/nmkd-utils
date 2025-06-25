@@ -734,7 +734,7 @@ namespace NmkdUtils
             // Find index of the first sentence-ending punctuation
             int index = s.IndexOfAny(['.', '!', '?', '…']);
 
-            if (index == -1 || index < 4)
+            if (index == -1 || index < 3)
             {
                 // No sentence-ending punctuation found, return the original string
                 return s.Replace("…", "...");
