@@ -10,8 +10,8 @@ namespace NmkdUtils
         /// <summary> Space after an ellipsis at the start of a line </summary>
         public static readonly Regex SpaceAfterEllipsisLineStart = new(@"(?m)(?<=^\.\.\.)\s", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Dot followed by an uppercase letter </summary>
-        public static readonly Regex PunctuationFollowedByUpperLetter = new(@"([.?!])(?=[A-Z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Dot followed by an uppercase letter and then a lowercase letter </summary>
+        public static readonly Regex PunctuationFollowedByUpperLetter = new(@"([.?!])(?=[A-Z][a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Comma followed by an lowercase letter </summary>
         public static readonly Regex CommaBeforeLowerLetter = new(@",(?=[a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
