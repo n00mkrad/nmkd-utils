@@ -4,6 +4,7 @@
     {
         public enum Rounding { Normal, Up, Down }
 
+        /// <summary> Round a double to int with optional rounding mode and multiple. </summary>
         public static int RoundToInt(this double d, Rounding method = Rounding.Normal, int divBy = 1)
         {
             int i = method switch
@@ -22,6 +23,7 @@
         public static int RoundToInt(this float f, Rounding method = Rounding.Normal, int divBy = 1) => ((double)f).RoundToInt(method, divBy);
         public static int Round(this float f, Rounding method = Rounding.Normal, int divBy = 1) => ((double)f).RoundToInt(method, divBy);
 
+        /// <summary> Round a double to long using <paramref name="method"/>. </summary>
         public static long RoundToLong(this double d, Rounding method = Rounding.Normal)
         {
             return method switch
@@ -55,6 +57,7 @@
             return shouldRoundUp ? (value >= 0 ? value + (mult - remainder) : value - remainder) : (value >= 0 ? value - remainder : value - (mult - remainder));
         }
 
+        /// <summary> Ratio of the larger number to the smaller. </summary>
         public static double RatioTo(this int first, int second)
         {
             return (double)Math.Max(first, second) / Math.Min(first, second);
@@ -72,11 +75,13 @@
             return i;
         }
 
+        /// <summary> Compare two floats within <paramref name="tolerance"/>. </summary>
         public static bool EqualsRoughly(this float a, float b, float tolerance = 0.0001f)
         {
             return Math.Abs(a - b) < tolerance;
         }
 
+        /// <summary> Check if <paramref name="value"/> is within [<paramref name="min"/>, <paramref name="max"/>]. </summary>
         public static bool IsInRange(this int value, int min, int max = int.MaxValue)
         {
             return value >= min && value <= max;

@@ -121,21 +121,25 @@ namespace NmkdUtils
             return totalSize;
         }
 
+        /// <summary> Sum file lengths of <paramref name="files"/>. </summary>
         public static long GetSize(this IEnumerable<FileInfo> files)
         {
             return files.Sum(f => f.Length);
         }
 
+        /// <summary> Check if <paramref name="file"/> has the given <paramref name="extension"/>. </summary>
         public static bool HasExtension(this FileInfo file, string extension)
         {
             return file.Extension.TrimStart('.').Up() == extension.TrimStart('.').Up();
         }
 
+        /// <summary> Check if <paramref name="file"/> has one of the <paramref name="extensions"/>. </summary>
         public static bool HasExtension(this FileInfo file, IEnumerable<string> extensions)
         {
             return extensions.Any(file.HasExtension);
         }
 
+        /// <summary> Wrapper for <see cref="IoUtils.GetPseudoHash"/>. </summary>
         public static string GetPseudoHash (this FileInfo file)
         {
             return IoUtils.GetPseudoHash(file);

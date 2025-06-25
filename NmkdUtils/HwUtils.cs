@@ -17,6 +17,7 @@ namespace NmkdUtils
             public override string ToString() => $"{FormatUtils.FileSize(UsedBytes)} / {FormatUtils.FileSize(TotalBytes)} ({FormatUtils.FileSize(AvailBytes)} Free)";
         }
 
+        /// <summary> Retrieve total, used, and available system memory. </summary>
         public static RamInfo GetRamInfo()
         {
             if (OsUtils.IsWindows)

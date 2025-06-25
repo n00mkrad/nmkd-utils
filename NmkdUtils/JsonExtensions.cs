@@ -6,6 +6,7 @@ namespace NmkdUtils
 {
     public static class JsonExtensions
     {
+        /// <summary> Deserialize JSON <paramref name="s"/> into an object. </summary>
         public static T FromJson<T>(this string s)
         {
             try
@@ -22,6 +23,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Deserialize JSON using custom settings. </summary>
         public static T FromJson<T>(this string s, NullValueHandling nullHandling, DefaultValueHandling defHandling, IContractResolver contractResolver = null)
         {
             try
@@ -46,6 +48,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Serialize an object to JSON. </summary>
         public static string ToJson(this object o, bool indent = false, bool ignoreErrors = true)
         {
             var settings = new JsonSerializerSettings();

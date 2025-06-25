@@ -79,6 +79,7 @@ namespace NmkdUtils
             _loggingThread.Start();
         }
 
+        /// <summary> Gracefully stop the background logging thread. </summary>
         public static void StopLogging()
         {
             _logQueue.CompleteAdding();
@@ -93,12 +94,14 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Write <paramref name="o"/> directly to the console without logging. </summary>
         public static void Print(object o)
         {
             Console.ResetColor();
             Console.WriteLine($"{o}");
         }
 
+        /// <summary> Log <paramref name="o"/> if <paramref name="condition"/> is true. </summary>
         public static void LogConditional(object o, bool condition, Level level = Level.Info)
         {
             if (condition)
@@ -107,6 +110,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Log <paramref name="o"/> if <paramref name="condition"/> evaluates to true. </summary>
         public static void LogConditional(object o, Func<bool> condition, Level level = Level.Info)
         {
             if (condition())
@@ -115,6 +119,7 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Enqueue a log entry with optional filtering and customization. </summary>
         public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null, Func<bool>? condition = null, bool? print = null, bool? toFile = null, ConsoleColor? customColor = null)
         {
             // Check if this is a Logger.Entry object since it should be enqueued, not turned into a string
@@ -148,16 +153,19 @@ namespace NmkdUtils
             }
         }
 
+        /// <summary> Log an <see cref="Exception"/> with optional note and stack trace. </summary>
         public static void Log(Exception e, string note = "", bool printTrace = true, bool condition = true)
         {
             Log(FormatUtils.Exception(e, note, printTrace), Level.Error, condition: () => condition);
         }
 
+        /// <summary> Shortcut for <see cref="Log"/> with <see cref="Level.Warning"/>. </summary>
         public static void LogWrn(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
         {
             Log(o, Level.Warning, condition: condition, print: print, toFile: toFile);
         }
 
+        /// <summary> Shortcut for <see cref="Log"/> with <see cref="Level.Error"/>. </summary>
         public static void LogErr(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
         {
             Log(o, Level.Error, condition: condition, print: print, toFile: toFile);

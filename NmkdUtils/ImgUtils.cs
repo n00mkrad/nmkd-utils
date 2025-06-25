@@ -15,6 +15,7 @@ namespace NmkdUtils
 {
     public class ImgUtils
     {
+        /// <summary> Create a high quality drawing context for <paramref name="bmp"/>. </summary>
         public static System.Drawing.Graphics GetGraphics(System.Drawing.Bitmap bmp, System.Drawing.Color? clearColor = null)
         {
             var gfx = System.Drawing.Graphics.FromImage(bmp);
@@ -95,6 +96,7 @@ namespace NmkdUtils
             Logger.LogErr($"Failed to get image from {source} ({source.GetType()})");
             return null;
         }
+        /// <summary> Load multiple images from a list of paths or base64 strings. </summary>
         public static List<Image> GetImages(List<string> sources) => sources.Select(GetImage).ToList();
 
         /// <summary>
@@ -238,6 +240,7 @@ namespace NmkdUtils
             return img;
         }
 
+        /// <summary> Rotate an image by <paramref name="angle"/> degrees. </summary>
         public static void Rotate(object input, float angle, Logger.Level logLvl = Logger.Level.Verbose)
         {
             Image img = GetImage(input);
@@ -278,6 +281,7 @@ namespace NmkdUtils
             return Convert.ToBase64String(ms.ToArray());
         }
 
+        /// <summary> Remove EXIF, ICC and XMP metadata from an image. </summary>
         public static Image StripMetadata(Image image, bool stripExif = true, bool stripIcc = true, bool stripXmp = true)
         {
             image.Metadata.ExifProfile = stripExif ? null : image.Metadata.ExifProfile;
@@ -286,6 +290,7 @@ namespace NmkdUtils
             return image;
         }
 
+        /// <summary> Estimate font size that results in <paramref name="targetHeightPx"/> pixel height. </summary>
         public static float GetFontSizeByTargetHeight(int targetHeightPx, string fontName = "Arial", FontStyle style = FontStyle.Regular, string sampleText = "The Quick Brown Fox Jumps Over The Lazy Dog.")
         {
             Font font = SystemFonts.CreateFont(fontName, 1f, style);
@@ -294,6 +299,7 @@ namespace NmkdUtils
             return fontSize;
         }
 
+        /// <summary> Create a simple text image sized to <paramref name="width"/>×<paramref name="height"/>. </summary>
         public static Image CreateTextImage(string text, int width, int height, string fontName = "Arial", float maxFontSize = 100f, bool whiteBg = false, bool invert = false)
         {
             float fontSize = GetFontSizeByTargetHeight(height);
@@ -312,6 +318,7 @@ namespace NmkdUtils
             return image;
         }
 
+        /// <summary> Stack images vertically, optionally inserting padding images. </summary>
         public static Image StackVertical(List<Image> images, List<Image>? padImages = null, bool padFirst = true, bool autoGenPadImgs = false, Color? bgCol = null, int marginPx = 8)
         {
             padImages ??= new List<Image>();
@@ -365,6 +372,7 @@ namespace NmkdUtils
             return result;
         }
 
+        /// <summary> Compute a perceptual hash from an image. </summary>
         public static ulong ComputeAverageHash(object input)
         {
             var img = GetImage(input);
@@ -373,6 +381,7 @@ namespace NmkdUtils
             return hash;
         }
 
+        /// <summary> Debug helper to benchmark <see cref="GetAutoCrop"/> on a folder of images. </summary>
         public static void TestAutoCrop()
         {
             string path = @"C:\Users\nmkd\Downloads\subsTest\crop2";
@@ -458,6 +467,7 @@ namespace NmkdUtils
             return new Rectangle(x, y, w, h);
         }
 
+        /// <summary> Release ImageSharp memory and run garbage collection. </summary>
         public static void CollectGarbage()
         {
             Configuration.Default.MemoryAllocator.ReleaseRetainedResources();
