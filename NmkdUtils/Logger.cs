@@ -16,6 +16,7 @@ namespace NmkdUtils
             public ConsoleColor? CustomColor = null;
             public int ShowTwiceTimeout = 0;
             public string? ReplaceWildcard = null;
+            public string FileSuffix = "";
 
             public Entry() { }
             public Entry(object message, Level? logLevel = null, bool? printToConsole = null, bool? writeToFile = null)
@@ -155,21 +156,15 @@ namespace NmkdUtils
 
         /// <summary> Log an <see cref="Exception"/> with optional note and stack trace. </summary>
         public static void Log(Exception e, string note = "", bool printTrace = true, bool condition = true)
-        {
-            Log(FormatUtils.Exception(e, note, printTrace), Level.Error, condition: () => condition);
-        }
+            => Log(FormatUtils.Exception(e, note, printTrace), Level.Error, condition: () => condition);
 
         /// <summary> Shortcut for <see cref="Log"/> with <see cref="Level.Warning"/>. </summary>
         public static void LogWrn(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
-        {
-            Log(o, Level.Warning, condition: condition, print: print, toFile: toFile);
-        }
+            => Log(o, Level.Warning, condition: condition, print: print, toFile: toFile);
 
         /// <summary> Shortcut for <see cref="Log"/> with <see cref="Level.Error"/>. </summary>
         public static void LogErr(object o, Func<bool>? condition = null, bool? print = null, bool? toFile = null)
-        {
-            Log(o, Level.Error, condition: condition, print: print, toFile: toFile);
-        }
+            => Log(o, Level.Error, condition: condition, print: print, toFile: toFile);
 
         public static void WriteLog(Entry entry)
         {
@@ -240,7 +235,12 @@ namespace NmkdUtils
                     lines[i] = $"{prefix} {lines[i].Trim()}";
                 }
 
-                TryWriteToFile(Path.Combine(LogsDir, $"{now.ToString("yyyy-MM-dd")}{(_debugger ? "_debug" : "")}.txt"), lines.Join(Environment.NewLine));
+                if (_debugger)
+                {
+                    entry.FileSuffix += "_debug";
+                }
+
+                TryWriteToFile(Path.Combine(LogsDir, $"{now.ToString("yyyy-MM-dd")}{entry.FileSuffix}.txt"), lines.Join(Environment.NewLine));
             }
         }
 
