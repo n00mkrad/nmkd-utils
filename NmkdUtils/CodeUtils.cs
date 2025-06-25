@@ -21,6 +21,18 @@ namespace NmkdUtils
 
         /// <inheritdoc cref="Assert(Func{bool}, Action, Action)"/>
         public static bool Assert(bool failureCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => failureCondition, failureAction, successAction);
+        public static bool AssertWarn(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
+        {
+            bool a = Assert(() => failureCondition, failureAction, successAction);
+            Logger.LogConditional(msg, a, Logger.Level.Warning);
+            return a;
+        }
+        public static bool AssertErr(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
+        {
+            bool a = Assert(() => failureCondition, failureAction, successAction);
+            Logger.LogConditional(msg, a, Logger.Level.Error);
+            return a;
+        }
         public static bool Validate(Func<bool> requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => requiredCondition() == false, failureAction, successAction);
         public static bool Validate(bool requiredCondition, Action? failureAction = null, Action? successAction = null) => Assert(() => !requiredCondition, failureAction, successAction);
 
