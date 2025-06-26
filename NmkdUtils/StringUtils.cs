@@ -735,13 +735,25 @@ namespace NmkdUtils
                 return s;
 
             s = s.Replace("...", "…"); // Replace ellipsis with a single character for splitting
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod1, "|"); // Replace non-sentence-ending periods with a placeholder
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod2, "|"); // Replace non-sentence-ending periods with a placeholder
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod3, "|"); // Replace non-sentence-ending periods with a placeholder
+            s = DoSplitSentences(s, allowRecurse);
+            s = s.Replace("…", "...").Trim(); // Undo ellipsis replacement
+            s = s.Replace("|", ".");
+            s = s.RegexReplace("\\. \"(?=\\r?$)", ".\"");
+            return s;
+        }
+
+        private static string DoSplitSentences(string s, bool allowRecurse = false)
+        {
             // Find index of the first sentence-ending punctuation
             int index = s.IndexOfAny(['.', '!', '?', '…']);
 
             if (index == -1 || index < 3)
             {
                 // No sentence-ending punctuation found, return the original string
-                return s.Replace("…", "...");
+                return s;
             }
 
             // Split the string at the first sentence-ending punctuation

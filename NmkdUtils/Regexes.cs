@@ -116,5 +116,12 @@ namespace NmkdUtils
         public static readonly Regex AnyLetterAtLeast3x = new(@"([A-Za-z])\1{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         public static readonly Regex StaySpaceAroundApostrophe = new(@"(?<=')\s(?=[A-Za-z]{1,2}\b)|\s(?='[A-Za-z]{1,2}\b)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+        /// <summary> Non-sentence-ending periods, checks for words with max 3 chars that start with a capital letter, e.g. Mr., Ltd., ... </summary>
+        public static readonly Regex NonSentenceEndingPeriod1 = new(@"(?<=\b[A-Z][A-Za-z0-9]{0,2})\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Non-sentence-ending periods, checks for abbreviations like "e.g.", "i.e." </summary>
+        public static readonly Regex NonSentenceEndingPeriod2 = new(@"(?<=\b[A-Za-z]\.[A-Za-z])\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Non-sentence-ending periods, checks for common abbreviations like "et al.", "etc.", "vs.", "cf.", "misc.", "dept." </summary>
+        public static readonly Regex NonSentenceEndingPeriod3 = new(@"(?<=\b(?:et al|etc|vs|cf|misc|dept|Capt|Corp|Blvd|Dept))\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     }
 }
