@@ -67,11 +67,19 @@
         {
             if (i < min)
                 i = min;
-
             if (i > max)
                 i = max;
-
             return i;
+        }
+
+        /// <summary> Limits a float to the given range <paramref name="min"/>-<paramref name="max"/> (both inclusive) </summary>
+        public static float Clamp(this float f, float min, float max = float.MaxValue)
+        {
+            if (f < min)
+                f = min;
+            if (f > max)
+                f = max;
+            return f;
         }
 
         /// <summary> Compare two floats within <paramref name="tolerance"/>. </summary>
