@@ -300,10 +300,10 @@ namespace NmkdUtils
         }
 
         /// <summary> Create a simple text image sized to <paramref name="width"/>×<paramref name="height"/>. </summary>
-        public static Image CreateTextImage(string text, int width, int height, string fontName = "Arial", float maxFontSize = 100f, bool whiteBg = false, bool invert = false)
+        public static Image CreateTextImage(string text, int width, int height, string fontName = "Arial", float minFontSize = 4f, float maxFontSize = 100f, bool whiteBg = false, bool invert = false)
         {
             float fontSize = GetFontSizeByTargetHeight(height);
-            Font font = SystemFonts.CreateFont(fontName, fontSize > maxFontSize ? maxFontSize : fontSize, FontStyle.Regular);
+            Font font = SystemFonts.CreateFont(fontName, fontSize.Clamp(minFontSize, maxFontSize), FontStyle.Regular);
             var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
             height = height.Clamp(0, (textSize.Height * 1.45f).Round());
             var image = new Image<Rgb24>(width, height, whiteBg ? Color.White : Color.Black);
@@ -315,6 +315,19 @@ namespace NmkdUtils
                 image.Mutate(x => x.Invert());
             }
 
+            return image;
+        }
+
+        /// <summary> Create a simple text image, size is variable (based on font size). </summary>
+        public static Image CreateTextImage(string text, float fontSize = 20f, int padding = 12, string fontName = "Arial", bool blackOnWhite = false)
+        {
+            Font font = SystemFonts.CreateFont(fontName, fontSize, FontStyle.Regular);
+            var textSize = TextMeasurer.MeasureSize(text, new TextOptions(font));
+            int width = (int)(textSize.Width + (padding * 2));
+            int height = (int)(textSize.Height + (padding * 2));
+            var image = new Image<Rgb24>(width, height, blackOnWhite ? Color.White : Color.Black);
+            var textOptions = new RichTextOptions(font) { Origin = new PointF(width / 2f, height / 2f), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            image.Mutate(ctx => ctx.DrawText(textOptions, text, blackOnWhite ? Color.Black : Color.White));
             return image;
         }
 
@@ -380,6 +393,13 @@ namespace NmkdUtils
             var hash = new PerceptualHash().Hash(clone);
             return hash;
         }
+        /// <summary> <inheritdoc cref="ComputeAverageHash(object)"/> (Parallel) </summary>
+        public static List<ulong> ComputeAverageHashes(List<object> inputs)
+        {
+            ConcurrentDictionary<int, ulong> hashes = [];
+            inputs.ParallelFor((input, i) => hashes[i] = ComputeAverageHash(input));
+            return hashes.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList();
+        }
 
         /// <summary> 
         /// Returns the rectangle containing anything that's not pure black. <br/> If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
@@ -443,7 +463,7 @@ namespace NmkdUtils
         /// <summary>
         /// <inheritdoc cref="CountNonBlackPixels(object, float, int, bool)"/> for a list of inputs. <br/> 
         /// </summary>
-        public static Dictionary<int, int> CountNonBlackPixelsList (List<object> inputs, float scale = 0.25f, int minValue = 1, bool dispose = false, int? threads = null)
+        public static List<int> CountNonBlackPixelsList (List<object> inputs, float scale = 0.25f, int minValue = 1, bool dispose = false, int? threads = null)
         {
             threads ??= Environment.ProcessorCount;
             var results = new ConcurrentDictionary<int, int>();
@@ -455,13 +475,15 @@ namespace NmkdUtils
                 results[index] = count;
             });
 
-            return results.ToDictionary();
+            // Convert the dictionary to a list, ordered by the original index (same order as inputs)
+            return results.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList();
         }
 
         /// <summary> Counts non-black pixels in an image, using a grayscale sum threshold of <paramref name="minValue"/>. </summary>
         public static int CountNonBlackPixels(object input, float scale = 0.25f, int minValue = 1, bool dispose = false)
         {
             var img = GetImage(input);
+            // GetAutoCrop(input, apply: true, dispose: false);
             int nonBlackCount = 0;
 
             img.ProcessPixels(scale, p =>
