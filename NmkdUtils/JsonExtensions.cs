@@ -12,14 +12,14 @@ namespace NmkdUtils
             try
             {
                 if (string.IsNullOrWhiteSpace(s))
-                    return default(T);
+                    return default;
 
                 return JsonConvert.DeserializeObject<T>(s);
             }
             catch (Exception ex)
             {
                 Logger.Log(ex, "Failed to deserialize");
-                return default(T);
+                return default;
             }
         }
 
@@ -29,7 +29,7 @@ namespace NmkdUtils
             try
             {
                 if (string.IsNullOrWhiteSpace(s))
-                    return default(T);
+                    return default;
 
                 var settings = new JsonSerializerSettings();
 
@@ -44,7 +44,7 @@ namespace NmkdUtils
             catch (Exception ex)
             {
                 Logger.Log(ex, "Failed to deserialize");
-                return default(T);
+                return default;
             }
         }
 
