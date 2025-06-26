@@ -309,6 +309,15 @@ namespace NmkdUtils
             Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = threads }, action);
         }
 
+        /// <summary> Shortcut for Parallel.For with threads parameter </summary>
+        public static void ParallelFor<T>(this IEnumerable<T> source, Action<T, int> action, int threads = 0)
+        {
+            if (threads <= 0)
+                threads = Environment.ProcessorCount;
+            var list = source.ToList();
+            Parallel.For(0, list.Count, new ParallelOptions { MaxDegreeOfParallelism = threads }, i => action(list[i], i));
+        }
+
         /// <summary> Cancels and disposes a <see cref="CancellationTokenSource"/> safely, ignoring any <see cref="ObjectDisposedException"/> that may occur. </summary>
         public static void CancelAndDispose(this CancellationTokenSource? cts)
         {
