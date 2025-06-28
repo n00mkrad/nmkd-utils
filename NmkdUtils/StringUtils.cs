@@ -736,8 +736,9 @@ namespace NmkdUtils
 
             s = s.Replace("...", "…"); // Replace ellipsis with a single character for splitting
             s = s.RegexReplace(Regexes.NonSentenceEndingPeriod1, "|"); // Replace non-sentence-ending periods with a placeholder
-            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod2, "|"); // Replace non-sentence-ending periods with a placeholder
-            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod3, "|"); // Replace non-sentence-ending periods with a placeholder
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod2, "|");
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriod3, "|");
+            s = s.RegexReplace(Regexes.NonSentenceEndingPeriodNumbers, "|");
             s = DoSplitSentences(s, allowRecurse);
             s = s.Replace("…", "...").Trim(); // Undo ellipsis replacement
             s = s.Replace("|", ".");
