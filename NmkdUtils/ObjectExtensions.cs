@@ -302,20 +302,26 @@ namespace NmkdUtils
         }
 
         /// <summary> Shortcut for Parallel.ForEach with threads parameter </summary>
-        public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int threads = 0)
+        public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int? threads = null)
         {
-            if (threads <= 0)
-                threads = Environment.ProcessorCount;
-            Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = threads }, action);
+            threads ??= Environment.ProcessorCount;
+            Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = (int)threads }, action);
         }
 
         /// <summary> Shortcut for Parallel.For with threads parameter </summary>
-        public static void ParallelFor<T>(this IEnumerable<T> source, Action<T, int> action, int threads = 0)
+        public static void ParallelFor<T>(this IEnumerable<T> source, Action<T, int> action, int? threads = null)
         {
-            if (threads <= 0)
-                threads = Environment.ProcessorCount;
+            threads ??= Environment.ProcessorCount;
             var list = source.ToList();
-            Parallel.For(0, list.Count, new ParallelOptions { MaxDegreeOfParallelism = threads }, i => action(list[i], i));
+            Parallel.For(0, list.Count, new ParallelOptions { MaxDegreeOfParallelism = (int)threads }, i => action(list[i], i));
+        }
+
+        /// <summary> Shortcut to process anything in parallel </summary>
+        public static List<TResult> ParallelMap<TInput, TResult>(this IList<TInput> inputs, Func<TInput, TResult> map, int? threads = null)
+        {
+            var results = new TResult[inputs.Count];
+            inputs.ParallelFor((input, i) => results[i] = map(input), threads);
+            return results.ToList();
         }
 
         /// <summary> Cancels and disposes a <see cref="CancellationTokenSource"/> safely, ignoring any <see cref="ObjectDisposedException"/> that may occur. </summary>

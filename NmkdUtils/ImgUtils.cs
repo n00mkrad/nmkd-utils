@@ -391,17 +391,11 @@ namespace NmkdUtils
         {
             var img = GetImage(input);
             using var clone = img.CloneAs<Rgba32>();
-            var hash = new PerceptualHash().Hash(clone);
-            return hash;
+            return new PerceptualHash().Hash(clone);
         }
         /// <summary> <inheritdoc cref="ComputeAverageHash(object)"/> (Parallel, takes a list of images and returns a list of hashes) </summary>
-        public static List<ulong> ComputeAverageHashes(List<object> inputs, int? threads = null)
-        {
-            threads ??= Environment.ProcessorCount * 2;
-            ConcurrentDictionary<int, ulong> hashes = [];
-            inputs.ParallelFor((input, i) => hashes[i] = ComputeAverageHash(input));
-            return hashes.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList();
-        }
+        public static List<ulong> ComputeAverageHashes(IEnumerable<object> inputs)
+            => inputs.ToList().ParallelMap(ComputeAverageHash, Environment.ProcessorCount * 2);
 
         /// <summary> 
         /// Returns the rectangle containing any pixels where R+G+B is at least <paramref name="minDeviation"/>. If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
