@@ -122,6 +122,8 @@ namespace NmkdUtils
         public static readonly Regex NonSentenceEndingPeriod2 = new(@"(?<=\b[A-Za-z]\.[A-Za-z])\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         /// <summary> Non-sentence-ending periods, checks for common abbreviations like "et al.", "etc.", "vs.", "cf.", "misc.", "dept." </summary>
         public static readonly Regex NonSentenceEndingPeriod3 = new(@"(?<=\b(?:et al|etc|vs|cf|misc|dept|Capt|Corp|Blvd|Dept))\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Non-sentence ending periods, checks for periods that are between numbers, e.g. "1.5", "2.0", "3.14" </summary>
+        public static readonly Regex NonSentenceEndingPeriodNumbers = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     }
 }
