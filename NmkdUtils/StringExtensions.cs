@@ -617,6 +617,14 @@ namespace NmkdUtils
             return pattern.Replace(s, replacement);
         }
 
+        /// <summary> <inheritdoc cref="RegexReplace(string, Regex, string)"/> (List version) </summary>
+        public static string RegexReplace(this string s, IEnumerable<Regex> patterns, string replacement = "")
+        {
+            patterns.ToList().ForEach(p => s = s.RegexReplace(p, replacement));
+            return s;
+        }
+
+
         /// <summary>
         /// Extended Replace method, does not error if <paramref name="find"/> is empty, can be case-insensitive with <paramref name="ci"/>, <br/>
         /// can replace only the first occurence with <paramref name="firstOnly"/>.
