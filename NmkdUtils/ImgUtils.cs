@@ -7,13 +7,13 @@ using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 
 namespace NmkdUtils
 {
-    public class ImgUtils
+    public partial class ImgUtils
     {
         /// <summary> Create a high quality drawing context for <paramref name="bmp"/>. </summary>
         public static System.Drawing.Graphics GetGraphics(System.Drawing.Bitmap bmp, System.Drawing.Color? clearColor = null)
@@ -58,7 +58,7 @@ namespace NmkdUtils
             return "";
         }
 
-        /// <summary> Gets an image from a file path, base64 string, or native Image object (in this case it will only be passed through). </summary>
+        /// <summary> Gets an image from a file path, base64 string, URL, or native Image object (in this case it will only be passed through). </summary>
         public static Image GetImage(object source)
         {
             if (source is Image img)
@@ -96,7 +96,7 @@ namespace NmkdUtils
             Logger.LogErr($"Failed to get image from {source} ({source.GetType()})");
             return null;
         }
-        /// <summary> Load multiple images from a list of paths or base64 strings. </summary>
+        /// <inheritdoc cref="GetImage(object)"/>
         public static List<Image> GetImages(List<string> sources) => sources.Select(GetImage).ToList();
 
         /// <summary>
@@ -138,9 +138,10 @@ namespace NmkdUtils
         /// Takes an image (or image path) and resizes it to the specified <paramref name="width"/> and <paramref name="height"/> (Defaults to width). <br/> 
         /// Size values of 8.0 or less are treated as a multiplier relative to the original size (e.g. 0.5).
         /// </summary>
-        public static Image Resize(object input, float width, float? height = null, ResizeMode mode = ResizeMode.Stretch, Logger.Level logLvl = Logger.Level.Verbose)
+        public static Image Resize(object input, float width, float? height = null, ResizeMode mode = ResizeMode.Stretch, IResampler? sampler = null, Logger.Level logLvl = Logger.Level.Verbose)
         {
             height ??= width; // If target height is not specified, use target width
+            sampler ??= KnownResamplers.Bicubic; // Default to bicubic resampling
             Image image = GetImage(input);
 
             if (width <= 8.0f)
@@ -151,7 +152,7 @@ namespace NmkdUtils
 
             int w = width.Round().RoundToMultiple(2);
             int h = ((float)height).Round().RoundToMultiple(2);
-            image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black }));
+            image.Mutate(x => x.Resize(new ResizeOptions { Mode = mode, Size = new Size(w, h), PadColor = Color.Black, Sampler = sampler }));
 
             Logger.Log($"Resized image to {image.Width}x{image.Height}", logLvl);
             return image;
@@ -393,29 +394,29 @@ namespace NmkdUtils
             var hash = new PerceptualHash().Hash(clone);
             return hash;
         }
-        /// <summary> <inheritdoc cref="ComputeAverageHash(object)"/> (Parallel) </summary>
-        public static List<ulong> ComputeAverageHashes(List<object> inputs)
+        /// <summary> <inheritdoc cref="ComputeAverageHash(object)"/> (Parallel, takes a list of images and returns a list of hashes) </summary>
+        public static List<ulong> ComputeAverageHashes(List<object> inputs, int? threads = null)
         {
+            threads ??= Environment.ProcessorCount * 2;
             ConcurrentDictionary<int, ulong> hashes = [];
             inputs.ParallelFor((input, i) => hashes[i] = ComputeAverageHash(input));
             return hashes.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList();
         }
 
         /// <summary> 
-        /// Returns the rectangle containing anything that's not pure black. <br/> If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
-        /// Subsampling can be controlled with <paramref name="scale"/>. <br/>
+        /// Returns the rectangle containing any pixels where R+G+B is at least <paramref name="minDeviation"/>. If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
+        /// Subsampling can be controlled with <paramref name="scale"/>. Padding can be added to each side (<paramref name="paddingH"/>, <paramref name="paddingW"/>)
         /// </summary>
-        public static Rectangle GetAutoCrop(object input, int paddingW = 0, int paddingH = 0, bool apply = false, float scale = 0.2f, bool dispose = false)
+        public static Rectangle GetAutoCrop(object input, int paddingW = 0, int paddingH = 0, int minDeviation = 1, byte[]? baseValue = null, bool apply = false, float scale = 0.5f, bool dispose = false)
         {
             var img = GetImage(input);
             using Image<Rgba32> tempImg = img.CloneAs<Rgba32>();
             tempImg.Resize(scale, scale); // Downscale for speed/memory efficiency
 
-            // initialize to "no content"
             int minX = tempImg.Width, minY = tempImg.Height;
             int maxX = 0, maxY = 0;
 
-            // 2) Single pass: find extents of any non‐black pixel
+            // Find extents of any pixel above the threshold
             tempImg.ProcessPixelRows(accessor =>
             {
                 for (int y = 0; y < tempImg.Height; y++)
@@ -424,7 +425,7 @@ namespace NmkdUtils
                     for (int x = 0; x < tempImg.Width; x++)
                     {
                         ref var p = ref row[x];
-                        if ((p.R + p.G + p.B) > 0) // Grayscale test: (R+G+B)>0
+                        if (p.GetRgbSum() >= minDeviation) // Grayscale test: (R+G+B)>0
                         {
                             if (x < minX) minX = x;
                             if (x > maxX) maxX = x;
@@ -435,19 +436,11 @@ namespace NmkdUtils
                 }
             });
 
-            if (minX > maxX || minY > maxY)
-            {
-                img.DisposeIf(dispose);
-                return Rectangle.Empty;
-            }
-
-            // Undo downsampling
+            // Undo downsampling & pad
             var x = (minX / scale).Round();
             var y = (minY / scale).Round();
             int w = ((maxX - minX + 1) / scale).Round();
             int h = ((maxY - minY + 1) / scale).Round();
-
-            // Add padding
             x = Math.Max(0, x - paddingW);
             y = Math.Max(0, y - paddingH);
             w = Math.Min(img.Width - x, w + paddingW * 2);
@@ -460,10 +453,8 @@ namespace NmkdUtils
             return new Rectangle(x, y, w, h);
         }
 
-        /// <summary>
-        /// <inheritdoc cref="CountNonBlackPixels(object, float, int, bool)"/> for a list of inputs. <br/> 
-        /// </summary>
-        public static List<int> CountNonBlackPixelsList (List<object> inputs, float scale = 0.25f, int minValue = 1, bool dispose = false, int? threads = null)
+        /// <summary> <inheritdoc cref="CountNonBlackPixels(object, float, int, bool)"/> <br/> Takes a list of images and return a list of pixel counts. </summary>
+        public static List<int> CountNonBlackPixelsList(List<object> inputs, float scale = 0.25f, int minValue = 1, bool dispose = false, int? threads = null)
         {
             threads ??= Environment.ProcessorCount;
             var results = new ConcurrentDictionary<int, int>();
@@ -474,9 +465,8 @@ namespace NmkdUtils
                 int count = CountNonBlackPixels(input, scale, minValue, dispose);
                 results[index] = count;
             });
-
-            // Convert the dictionary to a list, ordered by the original index (same order as inputs)
-            return results.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList();
+            
+            return results.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList(); // Convert to list, ordered by the original index (same order as inputs)
         }
 
         /// <summary> Counts non-black pixels in an image, using a grayscale sum threshold of <paramref name="minValue"/>. </summary>
@@ -496,6 +486,59 @@ namespace NmkdUtils
 
             img.DisposeIf(dispose);
             return (int)(nonBlackCount / scale);
+        }
+
+        /// <summary> Repeats an image to 3x3, applies a gaussian blur, and returns the center tile to avoid seams. </summary>
+        public static void BlurSeamless(object input, float gaussSigma)
+        {
+            var img = GetImage(input);
+            var clone = img.CloneAs<Rgba32>();
+            Tile(img, 3); // Tile to 3x3
+            img.Mutate(i => i.GaussianBlur(gaussSigma)); // Apply blur
+            Crop(img, clone.Width, clone.Height); // Crop to original size (center tile)
+            clone.Dispose();
+        }
+
+        /// <summary> Repeats an image to a specified tile count. <paramref name="tilesH"/> (vert. tiles) defaults to <paramref name="tilesW"/> (hor. tiles) if not provided. </summary>
+        public static void Tile(object input, int tilesW, int? tilesH = null)
+        {
+            tilesH ??= tilesW; // If tilesH is not specified, use tilesW
+            var img = GetImage(input);
+            var clone = img.CloneAs<Rgba32>();
+            img.Resize(tilesW, tilesH, sampler: KnownResamplers.NearestNeighbor); // Resize to 3x3 tiles
+
+            for (int y = 0; y < tilesH; y++)
+            {
+                for (int x = 0; x < tilesW; x++)
+                {
+                    img.Mutate(i => i.DrawImage(clone, new Point(x * clone.Width, y * clone.Height), 1f));
+                }
+            }
+
+            clone.Dispose();
+        }
+
+        /// <summary> Stacks images vertically or horizontally, depending on <paramref name="horizontal"/>. </summary>
+        public static Image Stack(IEnumerable<Image> images, bool horizontal = false, bool dispose = true)
+        {
+            if (images == null || !images.Any())
+                return null;
+
+            int totalWidth = horizontal ? images.Sum(img => img.Width) : images.Max(img => img.Width);
+            int totalHeight = horizontal ? images.Max(img => img.Height) : images.Sum(img => img.Height);
+            var stackedImage = new Image<Rgba32>(totalWidth, totalHeight);
+            int currentX = 0;
+            int currentY = 0;
+
+            foreach (var img in images)
+            {
+                stackedImage.Mutate(ctx => ctx.DrawImage(img, new Point(currentX, currentY), 1f));
+                currentY += horizontal ? 0 : img.Height;
+                currentX += horizontal ? img.Width : 0;
+            }
+
+            images.ToList().ForEach(img => img.DisposeIf(dispose));
+            return stackedImage;
         }
 
         /// <summary> Release ImageSharp memory and run garbage collection. </summary>
