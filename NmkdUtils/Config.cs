@@ -1,4 +1,6 @@
-﻿
+﻿using static NmkdUtils.CodeUtils;
+using static NmkdUtils.Enums;
+
 namespace NmkdUtils
 {
     public static class ConfigMgr<T> where T : new()
@@ -39,11 +41,13 @@ namespace NmkdUtils
                     return;
                 }
 
-                _config = File.ReadAllText(CfgFile).FromJson<T>();
+                _config = IoUtils.ReadTextFile(CfgFile).FromJson<T>(exHandling: ExceptionHandling.Throw);
 
                 if (_config == null)
                 {
-                    throw new Exception("Cfg is null!");
+                    Try(() => File.Move(CfgFile, CfgFile + ".invalid", true));
+                    Logger.LogErr($"Config file '{CfgFile}' is invalid, using new config.");
+                    _config = new T();
                 }
             }
             catch (Exception ex)
