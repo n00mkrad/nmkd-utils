@@ -118,5 +118,8 @@ namespace NmkdUtils
                 Thread.Sleep(intervalMs);
             }
         }
+
+        // Get enum values
+        public static List<T> GetEnumVals<T>() where T : Enum => Enum.GetValues(typeof(T)).Cast<T>().ToList();
     }
 }
