@@ -86,6 +86,32 @@ public static class ImgExtensions
     /// <summary> Remaps a byte value to a new range [<paramref name="outMin"/>, <paramref name="outMax"/>]. </summary>
     public static byte RemapByte(this byte value, byte outMin = 0, byte outMax = 255) => (byte)((value / 255f) * (outMax - outMin) + outMin).Round();
 
+    public static Rgba32 GetPixelAt(this Image<Rgba32> img, Enums.Position pos)
+    {
+        switch (pos) {
+            case Enums.Position.TopLeft:
+                return img[0, 0];
+            case Enums.Position.TopCenter:
+                return img[img.Width / 2, 0];
+            case Enums.Position.TopRight:
+                return img[img.Width - 1, 0];
+            case Enums.Position.MiddleLeft:
+                return img[0, img.Height / 2];
+            case Enums.Position.MiddleCenter:
+                return img[img.Width / 2, img.Height / 2];
+            case Enums.Position.MiddleRight:
+                return img[img.Width - 1, img.Height / 2];
+            case Enums.Position.BottomLeft:
+                return img[0, img.Height - 1];
+            case Enums.Position.BottomCenter:
+                return img[img.Width / 2, img.Height - 1];
+            case Enums.Position.BottomRight:
+                return img[img.Width - 1, img.Height - 1];
+            default:
+                return img[0, 0]; // Fallback to top-left if position is not recognized
+        }
+    }
+
     public static System.Drawing.Image ToImage(this Image img, bool dispose = false)
     {
         using var ms = new MemoryStream();

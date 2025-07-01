@@ -47,7 +47,7 @@ public partial class ImgUtils
                 mapsFuncs["smooth"] = p => p.Remap("rrr"); // R = Perceptual smoothness
                 mapsFuncs["f0"] = p => p.Remap("ggg"); // G = F0 aka Reflectance
                 mapsFuncs["psss"] = p => p.B < 65 ? p.Remap("bbb") : new Rgba32(p.B - 65, p.B - 65, p.B - 65); // B 0-64 = Porosity; B 65-255 = Subsurface scattering
-                mapsFuncs["em"] = p => p.Remap("aaa"); // A = F0 aka Reflectance
+                mapsFuncs["em"] = p => p.Remap("aaa"); // A = Emission
             }
 
             var channelImages = new Dictionary<string, Image>();

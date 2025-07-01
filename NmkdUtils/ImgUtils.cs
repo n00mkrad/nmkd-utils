@@ -9,6 +9,8 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using System.Collections.Concurrent;
+using static NmkdUtils.Enums;
+using static NmkdUtils.CodeUtils;
 
 
 namespace NmkdUtils
@@ -401,7 +403,7 @@ namespace NmkdUtils
         /// Returns the rectangle containing any pixels where R+G+B is at least <paramref name="minDeviation"/>. If <paramref name="apply"/> is true, the detected crop will be applied right away. <br/>
         /// Subsampling can be controlled with <paramref name="scale"/>. Padding can be added to each side (<paramref name="paddingH"/>, <paramref name="paddingW"/>)
         /// </summary>
-        public static Rectangle GetAutoCrop(object input, int paddingW = 0, int paddingH = 0, int minDeviation = 1, byte[]? baseValue = null, bool apply = false, float scale = 0.5f, bool dispose = false)
+        public static Rectangle GetAutoCrop(object input, int paddingW = 0, int paddingH = 0, float minDeviation = 1f, Rgba32? cropColor = null, bool apply = false, float scale = 0.5f, bool dispose = false)
         {
             var img = GetImage(input);
             using Image<Rgba32> tempImg = img.CloneAs<Rgba32>();
@@ -409,6 +411,10 @@ namespace NmkdUtils
 
             int minX = tempImg.Width, minY = tempImg.Height;
             int maxX = 0, maxY = 0;
+
+            // If no crop color is provided, sample all edge positions and use the darkest/lowest color value as the base color
+            cropColor ??= cropColor = GetEnumVals<Position>().Select(tempImg.GetPixelAt).OrderBy(p => p.GetRgbAvg()).FirstOrDefault();
+            var cropColorAvg = cropColor.Value.GetRgbAvg();
 
             // Find extents of any pixel above the threshold
             tempImg.ProcessPixelRows(accessor =>
@@ -419,7 +425,7 @@ namespace NmkdUtils
                     for (int x = 0; x < tempImg.Width; x++)
                     {
                         ref var p = ref row[x];
-                        if (p.GetRgbSum() >= minDeviation) // Grayscale test: (R+G+B)>0
+                        if (Math.Abs(p.GetRgbAvg() - cropColorAvg) >= minDeviation) // Check if distance between RGB average value and baseColorAvg is above the threshold
                         {
                             if (x < minX) minX = x;
                             if (x > maxX) maxX = x;
