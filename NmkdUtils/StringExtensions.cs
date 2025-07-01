@@ -328,7 +328,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
-        public static string SquashLines(this string s, string delimiter = " ", List<string>? unlessLineStartsWith = null)
+        public static string SquashLines(this string s, string delimiter = " ", IEnumerable<string>? unlessLineStartsWith = null, IEnumerable<string>? unlessLineEndsWith = null)
         {
             if (s.IsEmpty())
                 return s;
@@ -337,16 +337,24 @@ namespace NmkdUtils
             {
                 foreach (string exceptionStr in unlessLineStartsWith)
                 {
-                    s = s.Replace($"\n{exceptionStr}", $"<<<NO_LINE_BREAK>>>{exceptionStr}");
+                    s = s.Replace($"\n{exceptionStr}", $"<<<BREAK>>>{exceptionStr}");
+                }
+            }
+
+            if (unlessLineEndsWith != null)
+            {
+                foreach (string exceptionStr in unlessLineEndsWith)
+                {
+                    s = s.Replace($"{exceptionStr}\n", $"{exceptionStr}<<<BREAK>>>");
                 }
             }
 
             string pattern = @"(?:\r\n|\r|\n)+"; // matches one or more occurrences of \r\n (Windows), \n (Unix), or \r (older Macs)
             string result = Regex.Replace(s, pattern, delimiter); // Replace the consecutive line breaks with a single delimiter
 
-            if (unlessLineStartsWith != null)
+            if (unlessLineStartsWith != null || unlessLineEndsWith != null)
             {
-                result = result.Replace($"<<<NO_LINE_BREAK>>>", $"\n");
+                result = result.Replace($"<<<BREAK>>>", $"\n");
             }
 
             return result;
@@ -396,19 +404,33 @@ namespace NmkdUtils
             return new string(censorChar, s.Length);
         }
 
-        /// <summary> Limit sting to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the last 3 chars if too long </summary>
+        /// <summary> Limit string to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the last 3 chars if too long </summary>
         public static string Trunc(this string s, int maxChars, bool ellipsis = true)
         {
             if (s.IsEmpty())
                 return s;
 
-            string suffix = "";
-
             // Truncate the string so it fits in the maxChars limit. If ellipsis is true, add "..." to the end, but only if that wouldn't make it longer than maxChars
             if (s.Length > maxChars)
             {
-                suffix = ellipsis && maxChars > 3 ? "..." : "";
+                string suffix = ellipsis && maxChars > 3 ? "..." : "";
                 return string.Concat(s.AsSpan(0, maxChars - suffix.Length), suffix);
+            }
+
+            return s;
+        }
+
+        /// <summary> Limit string to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the first 3 chars if too long </summary>
+        public static string TruncLeft(this string s, int maxChars, bool ellipsis = true)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            // Truncate the string from the left so it fits in the maxChars limit
+            if (s.Length > maxChars)
+            {
+                string prefix = ellipsis && maxChars > 3 ? "..." : "";
+                return string.Concat(prefix, s.AsSpan(s.Length - (maxChars - prefix.Length)));
             }
 
             return s;
