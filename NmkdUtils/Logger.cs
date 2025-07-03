@@ -189,35 +189,29 @@ namespace NmkdUtils
             if (!shouldLog)
                 return;
 
+            string msgNoPrefix = msg;
+            var lines = msg.SplitIntoLines();
+            var linesPrint = new List<string>(lines); // Copy lines to a new list for printing
+
+            void PrefixLines(List<string> linesList, string prefix, bool trim = false)
+            {
+                for (int i = 0; i < linesList.Count; i++)
+                {
+                    string linePfx = i == 0 ? prefix : "".PadRight(prefix.Length);
+                    linesList[i] = trim ? $"{linePfx} {linesList[i].Trim()}" : $"{linePfx} {linesList[i]}";
+                }
+            }
+
             if (entry.Print && ConsoleLogLevel != Level.None && (int)level >= (int)ConsoleLogLevel) // Check if message should be printed to console & level is not None & loglevel is high enough
             {
-                string msgNoPrefix = msg;
-                var lines = msg.SplitIntoLines();
                 string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(_maxLogTypeStrLen, '.')}]" : $"[{_logLevelNames[level]}]";
-
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string prefix = i == 0 ? firstLinePrefix : "".PadRight(firstLinePrefix.Length);
-                    lines[i] = $"{prefix} {lines[i]}";
-                }
-
-                string output = string.Join(Environment.NewLine, lines);
+                PrefixLines(linesPrint, firstLinePrefix, trim: false);
+                string output = linesPrint.Join(Environment.NewLine);
                 string text = PrintLogLevel ? output : msgNoPrefix;
                 Console.ForegroundColor = entry.CustomColor == null ? _logLevelColors[level] : entry.CustomColor.Value; // Set custom color if given, otherwise use color based on log level
-
-                if (entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard) && entry.Message.MatchesWildcard(entry.ReplaceWildcard))
-                {
-                    CliUtils.ReplaceLastConsoleLine(text);
-                }
-                else
-                {
-                    Console.WriteLine(text);
-                }
-
-                if (_debugger)
-                    Debug.WriteLine(text);
-
-                Console.ResetColor();
+                bool replace = entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard) && entry.Message.MatchesWildcard(entry.ReplaceWildcard);
+                Debug.WriteLineIf(_debugger, text);
+                CliUtils.Write(text, replace, resetColorAfter: true);
                 LastLogMsgCon = msg;
                 OnConsoleWritten?.Invoke(msg);
                 OnConsoleWrittenWithLvl?.Invoke(output);
@@ -226,38 +220,24 @@ namespace NmkdUtils
             if (entry.WriteToFile && (int)level >= (int)FileLogLevel) // Check if message should be written to file & if loglevel is high enough
             {
                 var now = DateTime.Now;
-                var lines = msg.SplitIntoLines();
+                var linesFile = new List<string>(lines); // Copy lines to a new list for file logging
                 string firstLinePrefix = $"[{now.ToString("yyyy-MM-dd HH:mm:ss")}] [{_logLevelNames[level]}]";
-
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string prefix = i == 0 ? firstLinePrefix : "".PadRight(firstLinePrefix.Length);
-                    lines[i] = $"{prefix} {lines[i].Trim()}";
-                }
-
-                if (_debugger)
-                {
-                    entry.FileSuffix += "_debug";
-                }
-
-                TryWriteToFile(Path.Combine(LogsDir, $"{now.ToString("yyyy-MM-dd")}{entry.FileSuffix}.txt"), lines.Join(Environment.NewLine));
+                PrefixLines(linesFile, firstLinePrefix, trim: true);
+                entry.FileSuffix.AppendIf("_debug", _debugger);
+                TryWriteToFile(Path.Combine(LogsDir, $"{now.ToString("yyyy-MM-dd")}{entry.FileSuffix}.txt"), linesFile.Join(Environment.NewLine));
             }
         }
 
-        private static void TryWriteToFile(string path, string text, int delayMs = 25, int retries = 10)
+        private static void TryWriteToFile(string path, string text, int delayMs = 100, int retries = 10)
         {
             for (int i = 0; i < retries; i++)
             {
-                try
-                {
-                    File.AppendAllLines(path, [text]);
+                if (Try(() => File.AppendAllLines(path, [text]), logEx: false))
                     return;
-                }
-                catch
-                {
-                    Thread.Sleep(retries > 5 ? delayMs : delayMs * 2); // Wait longer if we're retrying a lot
-                }
+
+                Thread.Sleep(i >= 5 ? delayMs : delayMs * 2); // Wait longer if we're retrying a lot
             }
+
             Console.WriteLine($"Failed to write to log file after {retries} retries! ({path})");
         }
 
