@@ -93,6 +93,29 @@ namespace NmkdUtils
             Console.WriteLine(text); // Write the new text
         }
 
+        /// <summary> WriteLine shortcut that can alternatively call <see cref="ReplaceLastConsoleLine(string)"/> and optionally reset the color. </summary>
+        public static void Write(string text, bool replacePrevious = false, bool resetColorBefore = false, bool resetColorAfter = false)
+        {
+            if (resetColorBefore)
+            {
+                Console.ResetColor();
+            }
+
+            if (replacePrevious)
+            {
+                ReplaceLastConsoleLine(text);
+            }
+            else
+            {
+                Console.WriteLine(text);
+            }
+
+            if (resetColorAfter)
+            {
+                Console.ResetColor();
+            }
+        }
+
         /// <summary> Clears the console using ANSI escape codes. </summary>
         public static void ClearConsoleAnsi ()
         {
