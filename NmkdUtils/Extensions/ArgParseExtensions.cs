@@ -31,38 +31,30 @@ namespace NmkdUtils.Extensions
 
         public class PathConfig
         {
-            public enum SortMode { None, Name, Date, Size }
 
             public List<string> Paths = new();
             public bool AllowRecurse { get; set; } = false;
+            public int MaxRecurseDepth { get; set; } = 20;
             public bool AllowEmptyFiles { get; set; } = false;
             public string FilesWildcard { get; set; } = "*";
-            public SortMode Sort { get; set; } = SortMode.Name;
+            public Enums.Sort Sort { get; set; } = Enums.Sort.AToZ;
 
             public List<string> GetValidFiles()
             {
                 Paths = Paths.Select(p => p.Replace("\"", "").Trim().TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
                 var validDirs = Paths.Where(dirPath => IoUtils.ValidatePath(dirPath, IoUtils.PathType.Dir)).Select(Path.GetFullPath).ToList(); // Collect valid directories from input paths
-                validDirs.ForEach(d => Paths.AddRange(Directory.GetFiles(d, FilesWildcard, AllowRecurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))); // Add files from directories to the list of paths
+                validDirs.ForEach(d => Paths.AddRange(IoUtils.GetFilePaths(d, AllowRecurse, FilesWildcard))); // Add files from directories to the list of paths
                 var existMode = AllowEmptyFiles ? IoUtils.ExistMode.MustExist : IoUtils.ExistMode.NotEmpty;
                 var validFiles = Paths.Where(p => IoUtils.ValidatePath(p, IoUtils.PathType.File, existMode)).Select(Path.GetFullPath).Distinct(); // Filter out invalid files, get full paths, remove duplicates
 
-                if (FilesWildcard != "*" && FilesWildcard.IsNotEmpty())
-                {
-                    validFiles = validFiles.Where(f => new FileInfo(f).Name.MatchesWildcard(FilesWildcard)); // Apply wildcard filename filter
-                }
-
-                if (Sort == SortMode.Name) validFiles = validFiles.OrderBy(f => Path.GetFileName(f)); // Sort files by name
-                else if (Sort == SortMode.Date) validFiles = validFiles.OrderBy(f => File.GetLastWriteTime(f)); // Sort files by date
-                else if (Sort == SortMode.Size) validFiles = validFiles.OrderBy(f => new FileInfo(f).Length); // Sort files by size
-
+                IoUtils.SortFiles(validFiles, Sort);
                 return validFiles.ToList();
             }
 
             public List<FileInfo> GetValidFileInfos() => GetValidFiles().Select(f => new FileInfo(f)).ToList();
         }
 
-        public static PathConfig AddPathConfig(this Options opts, PathConfig.SortMode? sort = null, bool? allowEmptyFiles = null)
+        public static PathConfig AddPathConfig(this Options opts, Enums.Sort? sort = null, bool? allowEmptyFiles = null)
         {
             opts.AddHelpArgIfNotPresent();
             var pathCfg = new PathConfig();
@@ -82,9 +74,10 @@ namespace NmkdUtils.Extensions
                 pathCfg.Paths.Add(path);
             }
 
-            opts.OptionsSet.Add($"title__{nameof(PathConfig)}", $"Path Handling:", v => { });
+            opts.OptionsSet.Add($"title__{nameof(PathConfig)}", $"File Search:", v => { });
             opts.OptionsSet.Add("p_r|recurse", $"Allow recursive search for files - Only relevant when passing directory paths", v => pathCfg.AllowRecurse = v != null);
-            opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern - Only relevant when passing directory paths", v => pathCfg.FilesWildcard = v.Trim());
+            opts.OptionsSet.Add("p_d|recurse_depth=", $"Maximum recursion depth for file search - Only relevant if recurse is enabled|INT", v => pathCfg.AllowRecurse = v != null);
+            opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern - Only relevant when passing directory paths|WC", v => pathCfg.FilesWildcard = v.Trim());
             opts.OptionsSet.Add("<>", "File/directory paths - Wrap paths starting with a hyphen or containing spaces in quotes!", v => AddPathWithBasicValidation(v.Trim().TrimEnd('\\')));
             if (sort.HasValue) pathCfg.Sort = sort.Value;
             if (allowEmptyFiles.HasValue) pathCfg.AllowEmptyFiles = allowEmptyFiles.Value;
@@ -96,12 +89,14 @@ namespace NmkdUtils.Extensions
             if (pathCfg.Paths.All(File.Exists)) // All paths are files, so directory search options are not relevant
                 return;
 
-            bool recurse = pathCfg.AllowRecurse;
-            var filesWildcard = pathCfg.FilesWildcard;
-            CliUtils.ReadBool("Allow recursive search for files", (b) => recurse = b);
-            CliUtils.ReadLine("Filter files using a wildcard pattern (Default = All):", (s) => filesWildcard = s.Trim());
-            pathCfg.AllowRecurse = recurse;
-            pathCfg.FilesWildcard = filesWildcard;
+            pathCfg.AllowRecurse = CliUtils.ReadBool("Allow recursive search for files");
+
+            if (pathCfg.AllowRecurse)
+            {
+                int? depth = CliUtils.ReadInt($"Maximum recursion depth for file search (Default = {pathCfg.MaxRecurseDepth}):");
+                pathCfg.FilesWildcard = CliUtils.ReadLine("Filter files using a wildcard pattern (Default = All):").Trim();
+                pathCfg.MaxRecurseDepth = depth.GetValueOrDefault(pathCfg.MaxRecurseDepth).Clamp(1, 100);
+            }
         }
 
         public static void PrintHelp(this Options opts, bool colors = true, bool toFile = false)
@@ -219,6 +214,7 @@ namespace NmkdUtils.Extensions
                 {
                     if(opt.Description.EndsWith("|INT")) v = " <INT>";
                     else if(opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
+                    else if(opt.Description.EndsWith("|WC")) v = " <PATTERN>";
                     // else if(opt.Description.EndsWith("|STR")) v = " <STRING>";
                     else v = " <VALUE>";
                 }

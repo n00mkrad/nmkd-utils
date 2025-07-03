@@ -2,8 +2,8 @@
 using System.Drawing;
 using System.IO;
 using System.Text;
-using SearchOption = System.IO.SearchOption;
 using static NmkdUtils.CodeUtils;
+using SearchOption = System.IO.SearchOption;
 
 namespace NmkdUtils
 {
@@ -25,8 +25,41 @@ namespace NmkdUtils
             return null;
         }
 
-        /// <summary> Get file paths sorted by filename </summary>
-        public static string[] GetFilesSorted(string path, bool recursive = false, string pattern = "*")
+        /// <summary> Sorts file path strings. </summary>
+        public static IEnumerable<string> SortFiles(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
+        {
+            if (mode == Enums.Sort.None) return paths;
+            if (mode == Enums.Sort.AToZ) return paths.OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.ZToA) return paths.OrderByDescending(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.Newest) return paths.OrderByDescending(p => new FileInfo(p).LastWriteTime);
+            if (mode == Enums.Sort.Oldest) return paths.OrderBy(p => new FileInfo(p).LastWriteTime);
+            if (mode == Enums.Sort.Biggest) return paths.OrderByDescending(p => new FileInfo(p).Length);
+            if (mode == Enums.Sort.Smallest) return paths.OrderBy(p => new FileInfo(p).Length);
+            if (mode == Enums.Sort.Longest) return paths.OrderByDescending(p => p.Length);
+            if (mode == Enums.Sort.Shortest) return paths.OrderBy(p => p.Length);
+            return paths;
+        }
+
+        /// <summary> Sorts files. </summary>
+        public static IEnumerable<FileInfo> SortFiles(IEnumerable<FileInfo> files, Enums.Sort mode = Enums.Sort.AToZ)
+        {
+            if (mode == Enums.Sort.None) return files;
+            if (mode == Enums.Sort.AToZ) return files.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.ZToA) return files.OrderByDescending(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.Newest) return files.OrderByDescending(p => p.LastWriteTime);
+            if (mode == Enums.Sort.Oldest) return files.OrderBy(p => p.LastWriteTime);
+            if (mode == Enums.Sort.Biggest) return files.OrderByDescending(p => p.Length);
+            if (mode == Enums.Sort.Smallest) return files.OrderBy(p => p.Length);
+            if (mode == Enums.Sort.Longest) return files.OrderByDescending(p => p.FullName.Length);
+            if (mode == Enums.Sort.Shortest) return files.OrderBy(p => p.FullName.Length);
+            return files;
+        }
+
+        /// <summary>
+        /// Get file paths as a sorted string List.
+        /// When recursive is true, maxDepth can be used to limit how deep in the directory structure to search (0 = current directory only, null = no limit).
+        /// </summary>
+        public static List<string> GetFilePaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = 1)
         {
             try
             {
@@ -34,7 +67,10 @@ namespace NmkdUtils
                     return [];
 
                 SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                return Directory.GetFiles(path, pattern, opt).OrderBy(x => Path.GetFileName(x)).ToArray();
+                List<string> paths = SortFiles(Directory.GetFiles(path, pattern, opt), sort).ToList();
+                int rootDepth = GetPathPartCount(Path.GetFullPath(path), false);
+                paths = paths.Where(p => (GetPathPartCount(p, true) - rootDepth) <= maxDepth).ToList();
+                return paths;
             }
             catch (Exception ex)
             {
@@ -43,31 +79,13 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> Get files as FileInfo sorted by filename </summary>
-        public static FileInfo[] GetFileInfosSorted(string path, bool recursive = false, string pattern = "*")
-        {
-            try
-            {
-                if (path.IsEmpty() || !Directory.Exists(path))
-                    return [];
-
-
-                SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                var dir = new DirectoryInfo(path);
-                return dir.GetFiles(pattern, opt).OrderBy(x => x.Name).ToArray();
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(ex, $"Failed to get files");
-                return [];
-            }
-        }
+        /// <summary> Get files as a sorted FileInfo List </summary>
+        public static List<FileInfo> GetFiles(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ)
+            => GetFilePaths(path, recursive, pattern, sort).Select(p => Try(() => new FileInfo(p))).ToList();
 
         /// <summary> Get directories sorted by name (manual recursion to ignore inaccessible entries) </summary>
         public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = true)
-        {
-            return GetDirInfosSorted(root, recursive ? int.MaxValue : 1, pattern, noWarnings);
-        }
+            => GetDirInfosSorted(root, recursive ? int.MaxValue : 1, pattern, noWarnings);
 
         /// <summary>
         /// Get directories in <paramref name="root"/>, filtered with wildcard <paramref name="pattern"/>, sorted by name, with a maximum recursion depth <paramref name="maxDepth"/> (0 = No recursion).<br/>
@@ -116,6 +134,15 @@ namespace NmkdUtils
             return directories.OrderBy(d => d.Name).ToArray();
         }
 
+        public static int GetPathPartCount(string path, bool excludeFile)
+        {
+            if (path.IsEmpty())
+                return 0;
+
+            path = path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+            int count = path.Split('/').Where(s => s.IsNotEmpty()).Count();
+            return excludeFile ? count - 1 : count;
+        }
 
         /// <summary> Sends a file to the recycle bin. Returns success bool. </summary>
         private static bool RecycleFile(string path, bool logEx = false)
