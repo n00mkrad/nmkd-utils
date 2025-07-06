@@ -214,7 +214,7 @@ namespace NmkdUtils.Extensions
                 {
                     if(opt.Description.EndsWith("|INT")) v = " <INT>";
                     else if(opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
-                    else if(opt.Description.EndsWith("|WC")) v = " <PATTERN>";
+                    else if(opt.Description.EndsWith("|WC")) v = " <WCARD>";
                     // else if(opt.Description.EndsWith("|STR")) v = " <STRING>";
                     else v = " <VALUE>";
                 }
