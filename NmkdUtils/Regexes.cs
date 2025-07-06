@@ -124,6 +124,8 @@ namespace NmkdUtils
         public static readonly Regex NonSentenceEndingPeriod3 = new(@"(?<=\b(?:et al|etc|vs|cf|misc|dept|Capt|Corp|Blvd|Dept))\.", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         /// <summary> Non-sentence ending periods, checks for periods that are between numbers, e.g. "1.5", "2.0", "3.14" </summary>
         public static readonly Regex NonSentenceEndingPeriodNumbers = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Tokenize SRT subtitles: HTML style tags, curly brace tags, plain text </summary>
+        public static readonly Regex SrtTokenize = new(@"(<[^>]+>)|(\{[^}]+\})|([^<\{\}]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     }
 }
