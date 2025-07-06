@@ -61,10 +61,7 @@ namespace NmkdUtils.Media
             Values = _values.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
         }
 
-        public override string ToString()
-        {
-            return Print();
-        }
+        public override string ToString() => Print();
 
         public string Print(MediaObject? parentMedia = null, bool padCodec = false)
         {
@@ -125,7 +122,7 @@ namespace NmkdUtils.Media
 
             if (Type == CodecType.Video && !videoIsAttachment)
             {
-                var v = new VideoStream(this, ((VideoStream)this).FrameData);
+                var v = new VideoStream(this);
                 infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile).PadRight(codecPadding));
                 infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                 infos.Add(v.Sar.IsNotEmpty() && v.Sar != "1:1" ? $"{v.Width}x{v.Height} -> {v.ScaledRes.ToStr()}" : $"{v.Width}x{v.Height}");
@@ -200,9 +197,9 @@ namespace NmkdUtils.Media
         public bool Hdr10Plus;
         public int Rotation;
 
-        public VideoStream(Stream s, FrameData? fd = null, ColorMasteringData? cd = null)
+        public VideoStream(Stream s)
         {
-            Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; SideData = s.SideData; FrameData = fd; ColorData = cd; KbpsDemuxed = s.KbpsDemuxed;
+            s.CopyData(this);
             // Color
             Color = new ColorInfo(Values.Get("color_space"), Values.Get("color_transfer"), Values.Get("color_primaries"), Values.Get("color_range", "tv") != "tv");
             PixFmt = Values.Get("pix_fmt");
@@ -244,40 +241,69 @@ namespace NmkdUtils.Media
 
     public class AudioStream : Stream
     {
-        [JsonIgnore] public string Profile => Values.Get("profile");
-        [JsonIgnore] public string SampleFmt => Values.Get("sample_fmt");
-        [JsonIgnore] public int SampleRate => Values.Get("sample_rate").GetInt();
-        [JsonIgnore] public int Channels => Values.Get("channels").GetInt();
-        [JsonIgnore] public string ChannelLayout => Values.Get("channel_layout");
-        [JsonIgnore] public bool Atmos => Profile.Contains("+ Dolby Atmos");
-        public AudioStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; KbpsDemuxed = s.KbpsDemuxed; }
+        public string Profile { get; private set; }
+        public string SampleFmt { get; private set; }
+        public int SampleRate { get; private set; }
+        public int Channels { get; private set; }
+        public string ChannelLayout { get; private set; } = "";
+        public bool Atmos { get; private set; }
+
+        public AudioStream(Stream s)
+        {
+            s.CopyData(this);
+            Profile = Values.Get("profile");
+            SampleFmt = Values.Get("sample_fmt");
+            SampleRate = Values.Get("sample_rate").GetInt();
+            Channels = Values.Get("channels").GetInt();
+            ChannelLayout = Values.Get("channel_layout");
+            Atmos = Profile.Contains("+ Dolby Atmos");
+        }
     }
 
     public class SubtitleStream : Stream
     {
-        [JsonIgnore] public int Frames => Tags.FirstOrDefault(t => t.Key.StartsWith("NUMBER_OF_FRAMES"), new()).Value.GetInt(); // Use StartsWith to account for language tags, e.g. NUMBER_OF_FRAMES-eng
-        [JsonIgnore] public bool ForcedFlag => Disposition.Get("forced") == 1;
-        [JsonIgnore] public bool Forced => ForcedFlag || Title.Low().Contains("forced");
-        [JsonIgnore] public bool SdhFlag => Disposition.Get("hearing_impaired") == 1;
-        [JsonIgnore] public bool Sdh => Disposition.Get("hearing_impaired") == 1 || Title.ContainsAny(["sdh", "(cc)", "[cc]"], true) || Title.Low() == "cc" || Title.Low().EndsWith(" cc");
-        [JsonIgnore] public bool TextBased => Data.LibAv.TextSubFormats.Contains(Codec);
+        public int Frames { get; private set; }
+        public bool ForcedFlag { get; private set; }
+        public bool Forced { get; private set; }
+        public bool SdhFlag { get; private set; }
+        public bool Sdh { get; private set; }
+        public bool TextBased { get; private set; }
 
-        public SubtitleStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+        public SubtitleStream(Stream s)
+        {
+            s.CopyData(this);
+            Frames = Tags?.FirstOrDefault(t => t.Key.StartsWith("NUMBER_OF_FRAMES"), new()).Value.GetInt() ?? 0;
+            ForcedFlag = Disposition.Get("forced") == 1;
+            Forced = ForcedFlag || Title.ContainsCi("forced");
+            SdhFlag = Disposition.Get("hearing_impaired") == 1;
+            Sdh = SdhFlag || Title.ContainsAny(["sdh", "(cc)", "[cc]"], true) || Title.Low() == "cc" || Title.Low().EndsWith(" cc");
+            TextBased = Data.LibAv.TextSubFormats.Contains(Codec);
+        }
     }
 
     public class AttachmentStream : Stream
     {
-        [JsonIgnore] public string Filename => Tags.Get("filename");
-        [JsonIgnore] public string MimeType => Tags.Get("mimetype");
+        public string Filename { get; private set; } = "";
+        public string MimeType { get; private set; } = "";
 
-        public AttachmentStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+        public AttachmentStream(Stream s)
+        {
+            s.CopyData(this);
+            Filename = Tags.Get("filename");
+            MimeType = Tags.Get("mimetype");
+        }
     }
 
     public class DataStream : Stream
     {
-        [JsonIgnore] public string CodecTagString => Values.Get("codec_tag_string");
-        [JsonIgnore] public string HandlerName => Tags.Get("handler_name");
+        public string CodecTagString { get; private set; } = "";
+        public string HandlerName { get; private set; } = "";
 
-        public DataStream(Stream s) { Index = s.Index; Type = s.Type; Codec = s.Codec; CodecLong = s.CodecLong; Values = s.Values; Tags = s.Tags; }
+        public DataStream(Stream s)
+        {
+            s.CopyData(this);
+            CodecTagString = Values.Get("codec_tag_string");
+            HandlerName = Tags.Get("handler_name");
+        }
     }
 }
