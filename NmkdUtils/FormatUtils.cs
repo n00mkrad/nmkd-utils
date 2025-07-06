@@ -233,6 +233,9 @@ namespace NmkdUtils
 
                 clean = clean.ReplaceAtStart("at", firstOccurenceOnly: true);
 
+                if (clean.Contains("ThrowHelper"))
+                    continue;
+
                 if (clean.MatchesWildcard("--- * ---")) // e.g. "--- End of stack trace from previous location ---"
                 {
                     indent += "  ";
