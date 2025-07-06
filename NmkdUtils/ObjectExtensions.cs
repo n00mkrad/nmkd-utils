@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NmkdUtils
@@ -239,7 +240,7 @@ namespace NmkdUtils
             List<string> messages = [];
             var exs = ex.Unwrap();
 
-            foreach(var e in exs)
+            foreach (var e in exs)
             {
                 string msg = e.Message.TrimEnd('.');
 
@@ -262,6 +263,26 @@ namespace NmkdUtils
             foreach (var e in ex.Unwrap())
             {
                 Logger.Log(e, printTrace: withTrace);
+            }
+        }
+
+        #endregion
+
+        #region Reflection
+
+        public static void CopyData(this object source, object destination)
+        {
+            Type srcType = source.GetType();
+            var destProperties = new List<PropertyInfo>(destination.GetType().GetProperties());
+            foreach (PropertyInfo destProperty in destProperties)
+            {
+                if (!destProperty.CanWrite)
+                    continue;
+                PropertyInfo srcProperty = srcType.GetProperty(destProperty.Name);
+                if (srcProperty != null && srcProperty.CanRead)
+                {
+                    destProperty.SetValue(destination, srcProperty.GetValue(source));
+                }
             }
         }
 
