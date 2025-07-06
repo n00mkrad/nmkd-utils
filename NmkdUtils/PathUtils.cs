@@ -42,12 +42,10 @@ namespace NmkdUtils
             }
         }
 
-        public enum CommonDir { Cache, Logs, Temp };
+        public enum CommonDir { Cache, Logs, Temp, Db };
 
         public static string GetCommonSubdir(CommonDir subdir)
-        {
-            return GetAppSubdir(subdir.ToString());
-        }
+            => GetAppSubdir(subdir.ToString());
 
         public static string GetAppSubdir(string subdir, bool create = true)
         {
