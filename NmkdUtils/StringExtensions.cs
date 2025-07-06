@@ -477,6 +477,8 @@ namespace NmkdUtils
         public static bool MatchesAllWildcards(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
         /// <summary> Checks if a string matches any of the provided wildcard <paramref name="patterns"/> </summary>
         public static bool MatchesAnyWildcard(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.Any(p => s.MatchesWildcard(p, ignoreCase, orContains));
+        /// <inheritdoc cref="MatchesAnyWildcard(string, IEnumerable{string}, bool, bool)"/>
+        public static bool MatchesAnyWildcard(this string s, params string[] patterns) => patterns.Any(p => s.MatchesWildcard(p));
 
         /// <summary> Capitalizes the first char of a string. </summary>
         public static string CapitalizeFirstChar(this string s)
