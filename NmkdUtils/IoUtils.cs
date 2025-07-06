@@ -312,8 +312,8 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> A pseudo-hash built purely from the file metadata, thus not needing almost zero CPU or I/O resources no matter how big the file is.
-        /// <br/>Largely reliable, unless a file was edited without a file size change and without LastWriteTime being changed, which is extremely unlikely. </summary>
+        /// <summary> A pseudo-hash built purely from the file metadata, thus needing almost zero CPU or I/O resources no matter how big the file is. <br/>
+        /// Largely reliable, unless a file was edited without a file size change and without LastWriteTime being changed, which is extremely unlikely. </summary>
         public static string GetPseudoHash(FileInfo file)
         {
             if (file == null || !file.Exists)
@@ -324,6 +324,8 @@ namespace NmkdUtils
 
             return $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.ToString("yyyyMMddHHmmss")}";
         }
+        /// <inheritdoc cref="GetPseudoHash(FileInfo)"/>
+        public static string GetPseudoHash(string file) => GetPseudoHash(new FileInfo(file));
 
         /// <summary> Calculate size of a directory in bytes. </summary>
         public static long GetDirSize(string path, bool recursive = true, IEnumerable<string>? patterns = null)
