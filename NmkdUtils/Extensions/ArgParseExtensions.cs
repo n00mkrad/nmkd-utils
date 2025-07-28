@@ -39,6 +39,18 @@ namespace NmkdUtils.Extensions
             public string FilesWildcard { get; set; } = "*";
             public Enums.Sort Sort { get; set; } = Enums.Sort.AToZ;
 
+            public List<string> ValidFiles => _validFiles.Count == 0 ? GetValidFiles() : _validFiles;
+            private List<string> _validFiles = [];
+
+            public string GetLongestCommonPath (bool includeFilename = false, bool caseInsensitive = true)
+            {
+                // If includeFilename is false, we remove the filename from the paths
+                var paths = ValidFiles.Select(p => includeFilename ? p : Path.GetDirectoryName(p)).Where(p => p.IsNotEmpty()).ToList();
+                string pfx = StringUtils.FindLongestCommonPrefix(paths, ci: caseInsensitive);
+                pfx = !includeFilename && pfx.EndsWith('\\') ? pfx : pfx + '\\'; // Always include trailing backslash
+                return pfx;
+            }
+
             public List<string> GetValidFiles()
             {
                 Paths = Paths.Select(p => p.Replace("\"", "").Trim().TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
@@ -46,9 +58,9 @@ namespace NmkdUtils.Extensions
                 validDirs.ForEach(d => Paths.AddRange(IoUtils.GetFilePaths(d, AllowRecurse, FilesWildcard))); // Add files from directories to the list of paths
                 var existMode = AllowEmptyFiles ? IoUtils.ExistMode.MustExist : IoUtils.ExistMode.NotEmpty;
                 var validFiles = Paths.Where(p => IoUtils.ValidatePath(p, IoUtils.PathType.File, existMode)).Select(Path.GetFullPath).Distinct(); // Filter out invalid files, get full paths, remove duplicates
-
                 IoUtils.SortFiles(validFiles, Sort);
-                return validFiles.ToList();
+                _validFiles = validFiles.ToList(); // Cache the valid files
+                return _validFiles;
             }
 
             public List<FileInfo> GetValidFileInfos() => GetValidFiles().Select(f => new FileInfo(f)).ToList();
@@ -76,7 +88,7 @@ namespace NmkdUtils.Extensions
 
             opts.OptionsSet.Add($"title__{nameof(PathConfig)}", $"File Search:", v => { });
             opts.OptionsSet.Add("p_r|recurse", $"Allow recursive search for files - Only relevant when passing directory paths", v => pathCfg.AllowRecurse = v != null);
-            opts.OptionsSet.Add("p_d|recurse_depth=", $"Maximum recursion depth for file search - Only relevant if recurse is enabled|INT", v => pathCfg.AllowRecurse = v != null);
+            opts.OptionsSet.Add("p_d|recurse_depth=", $"Maximum recursion depth for file search - Only relevant if recurse is enabled|INT", v => pathCfg.MaxRecurseDepth = v.GetInt());
             opts.OptionsSet.Add("p_wc|file_wildcard=", $"Filter files using a wildcard pattern - Only relevant when passing directory paths|WC", v => pathCfg.FilesWildcard = v.Trim());
             opts.OptionsSet.Add("<>", "File/directory paths - Wrap paths starting with a hyphen or containing spaces in quotes!", v => AddPathWithBasicValidation(v.Trim().TrimEnd('\\')));
             if (sort.HasValue) pathCfg.Sort = sort.Value;
@@ -139,6 +151,9 @@ namespace NmkdUtils.Extensions
 
         public static string GetHelpStr(this Options opts, bool pad = true, bool linebreaks = false, bool newLines = false)
         {
+            if (opts == null)
+                return "";
+
             var lines = new List<string>();
             string looseStr = "<>";
             var allNames = new List<List<string>>();
@@ -213,6 +228,7 @@ namespace NmkdUtils.Extensions
                 if(opt.OptionValueType != OptionValueType.None)
                 {
                     if(opt.Description.EndsWith("|INT")) v = " <INT>";
+                    else if(opt.Description.EndsWith("|YN")) v = " <Y/N>";
                     else if(opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
                     else if(opt.Description.EndsWith("|WC")) v = " <WCARD>";
                     // else if(opt.Description.EndsWith("|STR")) v = " <STRING>";
@@ -265,7 +281,7 @@ namespace NmkdUtils.Extensions
             }
         }
 
-        public static bool TryParseOptions(this Options opts, IEnumerable<string> args, bool returnFalseIfShowHelp = true)
+        public static bool TryParseOptions(this Options opts, IEnumerable<string> args, bool returnFalseIfShowHelp = true, bool requiresAnyArgs = true)
         {
             try
             {
@@ -276,7 +292,7 @@ namespace NmkdUtils.Extensions
 
                 Logger.WaitForEmptyQueue();
 
-                bool hasAnyArgs = args.Where(a => a.Trim() != "/?").Any();
+                bool hasAnyArgs = args.Any();
 
                 if (hasAnyArgs)
                 {
@@ -297,7 +313,7 @@ namespace NmkdUtils.Extensions
                     return false;
                 }
 
-                return hasAnyArgs;
+                return !requiresAnyArgs || hasAnyArgs;
             }
             catch (Exception ex)
             {
