@@ -125,8 +125,9 @@ namespace NmkdUtils.Media
             }
         }
 
-        public void Print(bool format = true, bool colorizeStreams = true)
+        public void Print(bool format = true, bool colorizeStreams = true, List<string>? filterWildcards = null)
         {
+            filterWildcards ??= [];
             Logger.Log(File.Name);
             Logger.Log(new Logger.Entry(format ? $" {Format}" : Format) { CustomColor = format ? ConsoleColor.White : null });
 
@@ -142,7 +143,12 @@ namespace NmkdUtils.Media
                     _ => null
                 } : null;
 
-                Logger.Log(new Logger.Entry(s.Print(format ? this : null)) { CustomColor = color }); // Pass this MediaObject to the Print method for relative stream indexes, padding, etc
+                var entry = new Logger.Entry(s.Print(format ? this : null)) { CustomColor = color };
+
+                if (filterWildcards.Any() && !entry.Message.MatchesAllWildcards(filterWildcards))
+                    continue;
+
+                Logger.Log(entry); // Pass this MediaObject to the Print method for relative stream indexes, padding, etc
             }
         }
     }
