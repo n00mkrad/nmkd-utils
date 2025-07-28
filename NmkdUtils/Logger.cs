@@ -211,7 +211,7 @@ namespace NmkdUtils
                 Console.ForegroundColor = entry.CustomColor == null ? _logLevelColors[level] : entry.CustomColor.Value; // Set custom color if given, otherwise use color based on log level
                 bool replace = entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard) && entry.Message.MatchesWildcard(entry.ReplaceWildcard);
                 Debug.WriteLineIf(_debugger, text);
-                CliUtils.Write(text, replace, resetColorAfter: true);
+                CliUtils.Write(text, replace, resetColAfter: true);
                 LastLogMsgCon = msg;
                 OnConsoleWritten?.Invoke(msg);
                 OnConsoleWrittenWithLvl?.Invoke(output);

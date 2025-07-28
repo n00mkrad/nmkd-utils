@@ -56,10 +56,7 @@ namespace NmkdUtils.Media
         }
 
         [OnDeserialized]
-        private void OnDeserialized(StreamingContext context)
-        {
-            Values = _values.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
-        }
+        private void OnDeserialized(StreamingContext context) => Values = _values.ToDictionary(kvp => kvp.Key, kvp => $"{kvp.Value}");
 
         public override string ToString() => Print();
 

@@ -26,7 +26,7 @@ namespace NmkdUtils.Media
         }
 
         /// <summary>
-        /// Filter streams using multiple <paramref name="filters"/> in sequence.<br/><br/>Refer to <see cref="FilterStreams(IEnumerable{Stream}, CodecType, LanguageUtils.Language?, string, bool, int)"/>:<br/>
+        /// Filter streams using multiple <paramref name="filters"/> in sequence.<br/><br/>Refer to <see cref="FilterStreams(IEnumerable{Stream}, StreamFilter)"/>:<br/>
         /// </summary>
         public static List<Stream> FilterStreams(IEnumerable<Stream> streams, List<StreamFilter> filters)
         {
@@ -37,14 +37,12 @@ namespace NmkdUtils.Media
             return streams.ToList();
         }
 
-        /// <summary>
-        /// Filters streams using a single <paramref name="f"/> filter
-        /// </summary>
+        /// <summary> Filters streams using a single filter <paramref name="f"/> </summary>
         public static List<Stream> FilterStreams(IEnumerable<Stream> streams, StreamFilter f)
         {
             var copy = f.Invert ? streams.ToList() : []; // If invert is true, we need a copy of the original list to remove matches from
 
-            if (f.Indexes.HasItems())
+            if (f.Indexes.HasAny())
             {
                 // Include streams with positive indexes, exclude streams with negative indexes
                 var pos = f.Indexes.Where(i => i >= 0);
@@ -52,22 +50,22 @@ namespace NmkdUtils.Media
                 streams = streams.Where(s => pos.Contains(s.Index) && !neg.Contains(s.Index));
             }
 
-            if (f.Types.HasItems())
+            if (f.Types.HasAny())
             {
                 streams = streams.Where(s => f.Types.Contains(s.Type));
             }
 
-            if (f.Codecs.HasItems())
+            if (f.Codecs.HasAny())
             {
                 streams = streams.Where(s => f.Codecs.Any(c => s.CodecFriendly.MatchesWildcard(c, orContains: true)));
             }
 
-            if (f.Langs.HasItems())
+            if (f.Langs.HasAny())
             {
                 streams = streams.Where(s => f.Langs.Contains(LanguageUtils.GetLangByCode(s.Language)));
             }
 
-            if (f.Titles.HasItems())
+            if (f.Titles.HasAny())
             {
                 // Filter streams by title; getting only those that match the wildcard pattern. If a title is prefixed with _, it will be case-sensitive, the underscore is removed before running the wildcard match
                 streams = streams.Where(s => f.Titles.Any(t => s.Title.MatchesWildcard(t.TrimStart('_'), ignoreCase: !t.StartsWith("_"))));
