@@ -204,7 +204,7 @@ namespace NmkdUtils
             }
 
             // Check if out of bounds
-            if (x + width > img.Width || y + height > img.Height)
+            if (x + width > img.Width || y + height > img.Height || width < 1 || height < 1)
             {
                 Logger.LogWrn($"Crop area ({x}, {y}, {width}, {height}) is out of bounds for image size {img.Size.Format()}. Returning original image.");
                 return img;
