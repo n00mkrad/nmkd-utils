@@ -112,9 +112,7 @@ namespace NmkdUtils
             return input.Split(separator).Where(s => s.IsNotEmpty());
         }
 
-        /// <summary>
-        /// Splits a string by multiple separators
-        /// </summary>
+        /// <summary> Splits a string by multiple separators </summary>
         public static string[] Split(this string s, IEnumerable<string> separators, bool ci = false)
         {
             if (s == null)
@@ -145,6 +143,39 @@ namespace NmkdUtils
                 startIndex = matchIndex + matchSep.Length;
             }
             return result.Skip(1).ToArray();
+        }
+
+        /// <summary> Gets part n (<paramref name="index"/>) of a string after splitting by <paramref name="delimiter"/>. If out of bounds, returns empty string or <paramref name="nullAsFallback"/>. </summary>
+        public static string GetPart(this string s, string delimiter, int index = 0, bool nullAsFallback = false)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            if (delimiter.Length == 1)
+                return GetPart(s, delimiter[0], index, nullAsFallback);
+
+            var split = s.Split(delimiter);
+
+            // Return fallback if index is out of bounds
+            if (index < 0 || index >= split.Length)
+                return nullAsFallback ? null : "";
+
+            return split[index];
+        }
+        /// <summary> Gets part n (<paramref name="index"/>) of a string after splitting by <paramref name="delimiter"/>. If out of bounds, returns empty string or <paramref name="nullAsFallback"/>. </summary>
+
+        public static string GetPart(this string s, char delimiter, int index = 0, bool nullAsFallback = false)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            var split = s.Split(delimiter);
+
+            // Return fallback if index is out of bounds
+            if (index < 0 || index >= split.Length)
+                return nullAsFallback ? null : "";
+
+            return split[index];
         }
 
         public static float GetFloat(this string? str)
@@ -302,7 +333,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces only the last occurence of a string in a string </summary>
-        public static string ReplaceLast(this string s, string find, string replace)
+        public static string ReplaceLast(this string s, string find, string replace = "")
         {
             if (s.IsEmpty())
                 return s;
@@ -361,14 +392,14 @@ namespace NmkdUtils
         }
 
         /// <summary>
-        /// Removes empty/whitespace lines. If <paramref name="newLine"/> is not passed, Environment.NewLine is used for joining.
+        /// Removes empty/whitespace lines.
         /// </summary>
-        public static string RemoveEmptyLines(this string s, string? newLine = null)
+        public static string RemoveEmptyLines(this string s)
         {
             if (s.IsEmpty())
                 return s;
 
-            return s.SplitIntoLines().Where(l => l.IsNotEmpty()).Join(Environment.NewLine);
+            return s.SplitIntoLines().Where(l => l.IsNotEmpty()).Join("\n");
         }
 
         /// <summary> Shortcut for ToLowerInvariant </summary>
@@ -434,15 +465,6 @@ namespace NmkdUtils
             }
 
             return s;
-        }
-
-        /// <summary> Shortcut for string.Replace(myString, string.Empty) </summary>
-        public static string Remove(this string s, string stringToRemove)
-        {
-            if (s.IsEmpty() || stringToRemove.IsEmpty())
-                return s;
-
-            return s.Replace(stringToRemove, "");
         }
 
         /// <summary> Removes all specified chars from a string </summary>
@@ -640,6 +662,8 @@ namespace NmkdUtils
 
             return pattern.Replace(s, replacement);
         }
+        /// <inheritdoc cref="RegexReplace(string, Regex, string)"/>
+        public static string Replace(this string s, Regex pattern, string replacement = "") => s.RegexReplace(pattern, replacement);
 
         /// <summary> <inheritdoc cref="RegexReplace(string, Regex, string)"/> (List version) </summary>
         public static string RegexReplace(this string s, IEnumerable<Regex> patterns, string replacement = "")
@@ -746,5 +770,7 @@ namespace NmkdUtils
             return s + text;
         }
         public static string AppendIf(this string s, string text, bool condition) => s.AppendIf(text, () => condition);
+
+        public static string ZPad(this int s, int length = 2, char padChar = '0') => s.ToString().PadLeft(length, padChar);
     }
 }
