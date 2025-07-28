@@ -51,9 +51,9 @@ namespace NmkdUtils
             public bool Utf8 { get; set; } = true;
             public Func<bool>? Killswitch { get; set; } = null;
             public int KillswitchCheckIntervalMs = 1000;
-            public OutputDelegate? OnStdout;
-            public OutputDelegate? OnStderr;
-            public OutputDelegate? OnOutput;
+            public Action<string>? OnStdout;
+            public Action<string>? OnStderr;
+            public Action<string>? OnOutput;
 
             public RunConfig() { }
 
@@ -201,7 +201,7 @@ namespace NmkdUtils
                     IoUtils.Delete(tempScript);
                 }
 
-                string logMsg = cfg.PrintExitCode ? $"Finished (Code {result.ExitCode})." : "";
+                string logMsg = cfg.PrintExitCode ? $"Exited with code {result.ExitCode}." : "";
 
                 if (cfg.PrintOutputLines > 0 && result.Output.IsNotEmpty())
                 {
@@ -224,7 +224,7 @@ namespace NmkdUtils
             return result;
         }
 
-        public static Process NewProcess(bool hidden, string filename = "cmd.exe", Action<string> logAction = null, bool redirectStdin = false, Encoding outputEnc = null)
+        public static Process NewProcess(bool hidden, string filename = "cmd.exe", Action<string>? logAction = null, bool redirectStdin = false, Encoding? outputEnc = null)
         {
             var p = new Process();
             p.StartInfo.UseShellExecute = !hidden;
@@ -233,12 +233,8 @@ namespace NmkdUtils
             p.StartInfo.CreateNoWindow = hidden;
             p.StartInfo.FileName = filename;
             p.StartInfo.RedirectStandardInput = redirectStdin;
-
-            if (outputEnc != null)
-            {
-                p.StartInfo.StandardOutputEncoding = outputEnc;
-                p.StartInfo.StandardErrorEncoding = outputEnc;
-            }
+            p.StartInfo.StandardOutputEncoding = outputEnc;
+            p.StartInfo.StandardErrorEncoding = outputEnc;
 
             if (hidden && logAction != null)
             {
@@ -320,7 +316,7 @@ namespace NmkdUtils
         public static int CountExecutableInstances(string exePath = "", bool excludeSelf = false) => GetExecutableInstances(exePath, excludeSelf).Count;
 
         /// <summary> Gets the value of environment variable <paramref name="name"/>, if it does not exist, it returns <paramref name="fallbackValue"/>. </summary>
-        public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true)
+        public static string GetEnvVar(string name, string fallbackValue = "", bool checkSysVars = true, bool checkUserVars = true, bool checkProcessVars = true, bool warnIfNotFound = false)
         {
             string value = "";
 
@@ -338,8 +334,14 @@ namespace NmkdUtils
             {
                 value = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Process);
             }
+            
+            if (value.IsEmpty())
+            {
+                LogWrn($"Environment variable {name} not found or empty value.", condition: () => warnIfNotFound);
+                return fallbackValue;
+            }
 
-            return value.IsEmpty() ? fallbackValue : value;
+            return value;
         }
 
         public static ProcessPriorityClass GetOwnProcessPriority()
