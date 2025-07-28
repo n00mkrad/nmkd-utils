@@ -36,6 +36,18 @@ public static class ImgExtensions
         image.Dispose();
     }
 
+    /// <summary> Dispose <paramref name="images"/> when <paramref name="condition"/> is true. </summary>
+    public static void Dispose(this IEnumerable<Image> images, bool condition = true)
+    {
+        if (images == null)
+            return;
+
+        foreach (var img in images)
+        {
+            img?.Dispose();
+        }
+    }
+
     /// <summary> Run an action with every pixel, optionally with subsampling (<paramref name="scale"/>). </summary>
     public static void ProcessPixels(this Image image, float scale, Action<Rgba32, int, int> pixelAction)
     {
@@ -88,27 +100,18 @@ public static class ImgExtensions
 
     public static Rgba32 GetPixelAt(this Image<Rgba32> img, Enums.Position pos)
     {
-        switch (pos) {
-            case Enums.Position.TopLeft:
-                return img[0, 0];
-            case Enums.Position.TopCenter:
-                return img[img.Width / 2, 0];
-            case Enums.Position.TopRight:
-                return img[img.Width - 1, 0];
-            case Enums.Position.MiddleLeft:
-                return img[0, img.Height / 2];
-            case Enums.Position.MiddleCenter:
-                return img[img.Width / 2, img.Height / 2];
-            case Enums.Position.MiddleRight:
-                return img[img.Width - 1, img.Height / 2];
-            case Enums.Position.BottomLeft:
-                return img[0, img.Height - 1];
-            case Enums.Position.BottomCenter:
-                return img[img.Width / 2, img.Height - 1];
-            case Enums.Position.BottomRight:
-                return img[img.Width - 1, img.Height - 1];
-            default:
-                return img[0, 0]; // Fallback to top-left if position is not recognized
+        switch (pos)
+        {
+            case Enums.Position.TopLft: return img[0, 0];
+            case Enums.Position.TopCtr: return img[img.Width / 2, 0];
+            case Enums.Position.TopRgt: return img[img.Width - 1, 0];
+            case Enums.Position.MidLft: return img[0, img.Height / 2];
+            case Enums.Position.MidCtr: return img[img.Width / 2, img.Height / 2];
+            case Enums.Position.MidRgt: return img[img.Width - 1, img.Height / 2];
+            case Enums.Position.BotLft: return img[0, img.Height - 1];
+            case Enums.Position.BotCtr: return img[img.Width / 2, img.Height - 1];
+            case Enums.Position.BotRgt: return img[img.Width - 1, img.Height - 1];
+            default: return img[0, 0]; // Fallback to top-left if position is not recognized
         }
     }
 
