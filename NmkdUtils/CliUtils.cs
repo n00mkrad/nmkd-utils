@@ -94,14 +94,19 @@ namespace NmkdUtils
         }
 
         /// <summary> WriteLine shortcut that can alternatively call <see cref="ReplaceLastConsoleLine(string)"/> and optionally reset the color. </summary>
-        public static void Write(string text, bool replacePrevious = false, bool resetColorBefore = false, bool resetColorAfter = false)
+        public static void Write(string text, bool replaceLine = false, bool resetColBefore = false, bool resetColAfter = false, ConsoleColor? col = null)
         {
-            if (resetColorBefore)
+            if (resetColBefore && col == null)
             {
                 Console.ResetColor();
             }
 
-            if (replacePrevious)
+            if (col.HasValue)
+            {
+                Console.ForegroundColor = col.Value;
+            }
+
+            if (replaceLine)
             {
                 ReplaceLastConsoleLine(text);
             }
@@ -110,17 +115,14 @@ namespace NmkdUtils
                 Console.WriteLine(text);
             }
 
-            if (resetColorAfter)
+            if (resetColAfter)
             {
                 Console.ResetColor();
             }
         }
 
         /// <summary> Clears the console using ANSI escape codes. </summary>
-        public static void ClearConsoleAnsi ()
-        {
-            Console.Write("\x1b[2J\x1b[H");
-        }
+        public static void ClearConsoleAnsi() => Console.Write("\x1b[2J\x1b[H");
 
         /// <summary> Shows all available ConsoleColor values in the console with a sample text. </summary>
         public static void PrintConsoleColors()
