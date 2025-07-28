@@ -227,7 +227,7 @@ namespace NmkdUtils
                     if (ignoreExceptions == false)
                         throw;
 
-                    Logger.Log($"Failed to delete {file}: {ex.Message.Remove($"'{file}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == false);
+                    Logger.Log($"Failed to delete {file}: {ex.Message.Replace($"'{file}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == false);
                 }
             }
 
@@ -248,7 +248,7 @@ namespace NmkdUtils
                 if (ignoreExceptions == false)
                     throw;
 
-                Logger.Log($"Failed to delete {path}: {ex.Message.Remove($"'{path}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == null || !ex.Message.Contains("The directory is not empty"));
+                Logger.Log($"Failed to delete {path}: {ex.Message.Replace($"'{path}' ")}", Logger.Level.Warning, condition: () => ignoreExceptions == null || !ex.Message.Contains("The directory is not empty"));
             }
         }
 
@@ -392,6 +392,17 @@ namespace NmkdUtils
         {
             float f = GetFreeDiskSpace(path, -1, log) / divisor / divisor / divisor;
             return f == -1 ? fallback : f;
+        }
+
+        /// <summary>
+        /// Checks if enough space is on the drive of <paramref name="path"/>. If an exception occurs, <paramref name="fallback"/> is returned instead. <br/>
+        /// Fills variables <paramref name="availSpace"/> (available space in bytes) and <paramref name="drive"/> (drive root path).
+        /// </summary>
+        public static bool HasEnoughDiskSpace(string path, long bytesNeeded, out long availSpace, out string drive, long fallback = -1, bool log = true)
+        {
+            availSpace = GetFreeDiskSpace(path, fallback, log: log);
+            drive = Path.GetPathRoot(Path.GetFullPath(path));
+            return availSpace > bytesNeeded;
         }
 
         public enum ExistMode
@@ -606,7 +617,7 @@ namespace NmkdUtils
                             configDict.Set(executable, exePath);
                         }
 
-                        Logger.Log($"Using {executable} from common install dir: {exePath}", Logger.Level.Debug);
+                        Logger.Log($"Using {executable}.exe from common install dir: {exePath}", Logger.Level.Debug);
                         return exePath;
                     }
 
@@ -616,13 +627,14 @@ namespace NmkdUtils
 
             if (!allowInteraction)
             {
+                Logger.Log($"Could not find {executable}.", Logger.Level.Debug);
                 return "";
             }
 
-            Logger.Log($"Unable to find {executable}.", Logger.Level.Warning);
+            Logger.Log($"Could not find {executable}.", Logger.Level.Warning);
 
             // 4) Ask user for path
-            string userCommand = CliUtils.ReadLine($"Enter path (or command) to {executable}:"); // Prompt user to input path
+            string userCommand = CliUtils.ReadLine($"Enter path (or command) for {executable}:"); // Prompt user to input path
 
             if (File.Exists(GetExePath(userCommand, out string pInput)) || Path.Exists(OsUtils.GetEnvExecutable(userCommand).FirstOrDefault("")))
             {
