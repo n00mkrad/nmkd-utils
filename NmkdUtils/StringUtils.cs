@@ -106,12 +106,9 @@ namespace NmkdUtils
             return regex.Replace(s, m => "_" + m.Value.ToLower()).TrimStart('_');
         }
 
-        public static List<string> GetEnumNamesSnek(Type enumType)
-        {
-            return Enum.GetNames(enumType).Select(PascalToSnakeCase).ToList();
-        }
+        public static List<string> GetEnumNamesSnek(Type enumType) => Enum.GetNames(enumType).Select(PascalToSnakeCase).ToList();
 
-        public static string PrintEnumsCli(Type enumType, bool withNumbers = true, bool linebreaks = false)
+        public static string PrintEnumCli(Type enumType, bool withNumbers = true, bool linebreaks = false)
         {
             string delimiter = linebreaks ? "\n" : " ";
             var list = GetEnumNamesSnek(enumType);
@@ -119,6 +116,9 @@ namespace NmkdUtils
                 list = list.Select((s, i) => $"{i}: {s}").ToList();
             return list.Join(delimiter);
         }
+
+        public static string PrintEnumCli<T>(bool withNumbers = true, bool linebreaks = false) where T : Enum
+            => PrintEnumCli(typeof(T), withNumbers, linebreaks);
 
         /// <summary>
         /// Parses a string representing a bitrate (e.g. "24m"), case-insensitive, and returns it as kbps
@@ -766,5 +766,7 @@ namespace NmkdUtils
 
             return (firstSentence + "\n" + SplitSentences(remainingText)).Replace("…", "...").Trim();
         }
+
+        public static string GetClipboardText() => TextCopy.ClipboardService.GetText();
     }
 }
