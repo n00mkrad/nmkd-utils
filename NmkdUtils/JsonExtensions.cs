@@ -15,7 +15,7 @@ namespace NmkdUtils
                 if (s.IsEmpty())
                     return fallback;
 
-                var settings = new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Include, DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate };
+                var settings = new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Include, DefaultValueHandling = DefaultValueHandling.Include };
                 return JsonConvert.DeserializeObject<T>(s, settings);
             }
             catch (Exception ex)
