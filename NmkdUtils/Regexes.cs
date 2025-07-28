@@ -11,7 +11,7 @@ namespace NmkdUtils
         public static readonly Regex SpaceAfterEllipsisLineStart = new(@"(?m)(?<=^\.\.\.)\s", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Dot followed by an uppercase letter and then a lowercase letter </summary>
-        public static readonly Regex PunctuationFollowedByUpperLetter = new(@"([.?!])(?=[A-Z][a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        public static readonly Regex PunctuationFollowedByUpperLetter = new(@"((?<!(?:\.\.))\.|[!?])(?=[A-Z][a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Comma followed by an lowercase letter </summary>
         public static readonly Regex CommaBeforeLowerLetter = new(@",(?=[a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -26,10 +26,15 @@ namespace NmkdUtils
         public static readonly Regex SizeInBrackets = new(@"\[\d+x\d+\]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Text in backticks (markdown etc.) </summary>
-        public static readonly Regex InlineCode = new(@"`([^`]+)`", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        public static readonly Regex MdInlineCode = new(@"`([^`]+)`", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Markdown multiline codeblock start or end (e.g. "```css", "```"), matches entire line </summary>
+        public static readonly Regex MdCodeStartEnd = new(@"(?m)^```.*", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Text in brackets trailing colons </summary>
         public static readonly Regex TextInBracketsColon = new(@"\[(.*?)\]:?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary> Text in brackets; if there is leading space, it gets included </summary>
+        public static readonly Regex TextInBracketsWithOptLeadingSpace = new(@"\s?\[(.*?)\](?:\s(?=:))?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
         public static readonly Regex TextInParenthesesLeadingSpaces = new(@"\s*\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -37,8 +42,8 @@ namespace NmkdUtils
         /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
         public static readonly Regex TextInParentheses = new(@"\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Speaker name in SDH subtitles. Handles edge cases with lowercase letters like "McGREGOR", "DiCAPRIO" etc. </summary>
-        public static readonly Regex SdhSpeakerName = new(@"(?:^|(?<=[\p{P}]\s))(?:(?:Mac)|(?:[A-Z][A-Za-z]))[A-Z0-9\- .]*:\s?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Speaker name in SDH subtitles. Handles edge cases with lowercase letters like "McGREGOR", "DiCAPRIO" or apostrophes like O'Connor. Also matches if there's "-" or "- " before the name. </summary>
+        public static readonly Regex SdhSpeakerName = new(@"(?:^|(?<=[\p{P}]\s))(?:-\s?)?(?:(?:Mac)|[A-Z](?:'[A-Z]|[A-Za-z]))[A-Z0-9' .-]*:\s?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Single hyphen at the start of a line </summary>
         public static readonly Regex HyphensAtLineStart = new(@"^-+(?!-)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
