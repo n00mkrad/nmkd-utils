@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using Newtonsoft.Json.Linq;
+using System.Collections;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -36,8 +37,7 @@ namespace NmkdUtils
         /// <summary> Get a value from a dictionary, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
         public static TValue? Get<TKey, TValue>(this IDictionary<TKey, TValue>? dictionary, TKey key, TValue? fallback = default)
         {
-            // For string values, use empty string instead of null as default value
-            if (typeof(TValue) == typeof(string) && fallback is null)
+            if (typeof(TValue) == typeof(string) && fallback is null) // For string values, use empty string instead of null as default value
             {
                 fallback = (TValue)(object)"";
             }
@@ -48,11 +48,35 @@ namespace NmkdUtils
             return dictionary.TryGetValue(key, out var value) ? value : fallback;
         }
 
-        // Same as above, but with out parameter
+        /// <inheritdoc cref="Get{TKey, TValue}"/>
         public static bool Get<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue? value, TValue? fallback = default)
         {
             value = dictionary.Get(key, fallback);
             return value is not null && !value.Equals(fallback);
+        }
+
+        /// <summary> Get a value from a List, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
+        public static T Get<T>(this IList<T>? list, int index, T? fallback = default)
+        {
+            if (typeof(T) == typeof(string) && fallback is null) // For string values, use empty string instead of null as default value
+            {
+                fallback = (T)(object)"";
+            }
+
+            if (list == null || index < 0 || index >= list.Count)
+                return fallback;
+
+            if (index < list.Count)
+                return list[index];
+
+            return fallback;
+        }
+
+        /// <inheritdoc cref="Get{T}"/>
+        public static bool Get<T>(this IList<T>? list, int index, out T? value, T? fallback = default)
+        {
+            value = list.Get(index, fallback);
+            return value is not null;
         }
 
         /// <summary> Shortcut for ElementAtOrDefault with support for default/fallback value </summary>
@@ -109,8 +133,12 @@ namespace NmkdUtils
         /// <summary> Add <paramref name="item"/> to list if it is not already in that list </summary>
         public static void AddIfNotContains<T>(this IList<T>? list, T item) => list?.AddIf(item, !list.Contains(item));
 
-        /// <summary> <inheritdoc cref="AddIf{T}(IList{T}?, T, bool)"/> </summary>
+        /// <inheritdoc cref="AddIf{T}(IList{T}?, T, bool)"/>
         public static void AddIf<T>(this IList<T>? list, T item, Func<bool> condition) => list.AddIf(item, condition());
+
+        /// <summary> Returns an empty list if the collection is null, otherwise returns the collection itself. </summary>
+        public static IEnumerable<T> OrEmpty<T>(this IEnumerable<T> collection)
+            => collection ?? [];
 
         public static (List<T> Shuffled, int[] Permutation) ShuffleWithPermutation<T>(this IList<T> list, Random rng)
         {
@@ -150,13 +178,16 @@ namespace NmkdUtils
         #region LINQ Shortcuts & Extensions
 
         /// <summary> Shortcut for '<paramref name="source"/>.Any() == false' </summary>
-        public static bool None<T>(this IEnumerable<T> source) => !source.Any();
+        public static bool None<T>(this IEnumerable<T> source, bool nullAsEmpty = true)
+            => (nullAsEmpty ? source : source.OrEmpty()).Any() == false;
 
-        /// <summary> Shortcut for '<paramref name="source"/>.Any() == false' </summary>
-        public static bool None<T>(this IEnumerable<T> source, Func<T, bool> predicate) => !source.Any(predicate);
+        /// <inheritdoc cref="None{T}(IEnumerable{T}, bool)"/>
+        public static bool None<T>(this IEnumerable<T> source, Func<T, bool> predicate, bool nullAsEmpty = true)
+            => (nullAsEmpty ? source : source.OrEmpty()).Any(predicate) == false;
 
         /// <summary> Checks if a collection is not null and has at least 1 item </summary>
-        public static bool HasItems<T>(this IEnumerable<T> source) => source?.Any() ?? false;
+        public static bool HasAny<T>(this IEnumerable<T> source, bool nullAsEmpty = true)
+            => nullAsEmpty ? source.OrEmpty().Any() : source.Any();
 
         /// <summary> Gets the single most common item using a <paramref name="selector"/> </summary>
         public static T MostCommonBy<T, TProperty>(this IEnumerable<T> list, Func<T, TProperty> selector)
@@ -165,7 +196,7 @@ namespace NmkdUtils
         /// <summary> Gets a list of most common items using a <paramref name="selector"/> </summary>
         public static IEnumerable<T> MostCommonGroupBy<T, TProperty>(this IEnumerable<T> list, Func<T, TProperty> selector)
         {
-            if (list == null || !list.Any())
+            if (list.None())
                 return [];
 
             return list.GroupBy(selector).MaxBy(g => g.Count())!;
@@ -175,7 +206,7 @@ namespace NmkdUtils
         public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list, out int mostCommonCount)
         {
             mostCommonCount = 0;
-            if (list == null || !list.Any())
+            if (list.None())
                 return [];
 
             var counts = list.GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count()); // Build a dictionary of counts
@@ -326,6 +357,16 @@ namespace NmkdUtils
         public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int? threads = null)
         {
             threads ??= Environment.ProcessorCount;
+
+            if (threads == 1)
+            {
+                foreach (var item in source)
+                {
+                    action(item);
+                }
+                return;
+            }
+
             Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = (int)threads }, action);
         }
 
