@@ -12,18 +12,16 @@ namespace NmkdUtils.Extensions
             public string BasicUsage { get; set; } = "";
             public string AdditionalHelpText { get; set; } = "";
             public bool AddHelpArg { get; set; } = true;
-            public bool AlwaysPrintHelp { get; set; } = false;
             public bool PrintLooseArgs { get; set; } = true;
             public bool PrintHelpIfNoArgs { get; set; } = true;
             public List<string> InvalidArgs { get; set; } = [];
 
-            public Options(string basicUsage = "", OptionSet? options = null, string additionalHelp = "", bool addHelpArg = true, bool alwaysPrintHelp = false, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
+            public Options(string basicUsage = "", OptionSet? options = null, string additionalHelp = "", bool addHelpArg = true, bool printLooseArgs = true, bool printHelpIfNoArgs = true)
             {
                 BasicUsage = basicUsage;
                 OptionsSet = options;
                 AdditionalHelpText = additionalHelp;
                 AddHelpArg = addHelpArg;
-                AlwaysPrintHelp = alwaysPrintHelp;
                 PrintLooseArgs = printLooseArgs;
                 PrintHelpIfNoArgs = printHelpIfNoArgs;
             }
@@ -39,10 +37,10 @@ namespace NmkdUtils.Extensions
             public string FilesWildcard { get; set; } = "*";
             public Enums.Sort Sort { get; set; } = Enums.Sort.AToZ;
 
-            public List<string> ValidFiles => _validFiles.Count == 0 ? GetValidFiles() : _validFiles;
+            public List<string> ValidFiles => GetValidFiles();
             private List<string> _validFiles = [];
 
-            public string GetLongestCommonPath (bool includeFilename = false, bool caseInsensitive = true)
+            public string GetLongestCommonPath(bool includeFilename = false, bool caseInsensitive = true)
             {
                 // If includeFilename is false, we remove the filename from the paths
                 var paths = ValidFiles.Select(p => includeFilename ? p : Path.GetDirectoryName(p)).Where(p => p.IsNotEmpty()).ToList();
@@ -51,8 +49,13 @@ namespace NmkdUtils.Extensions
                 return pfx;
             }
 
-            public List<string> GetValidFiles()
+            public List<string> GetValidFiles(bool invalidateCache = false)
             {
+                _validFiles = invalidateCache ? [] : _validFiles;
+
+                if(_validFiles.Count > 0)
+                    return _validFiles;
+
                 Paths = Paths.Select(p => p.Replace("\"", "").Trim().TrimEnd('\\')).Distinct().ToList(); // Remove trailing backslashes & remove duplicates
                 var validDirs = Paths.Where(dirPath => IoUtils.ValidatePath(dirPath, IoUtils.PathType.Dir)).Select(Path.GetFullPath).ToList(); // Collect valid directories from input paths
                 validDirs.ForEach(d => Paths.AddRange(IoUtils.GetFilePaths(d, AllowRecurse, FilesWildcard))); // Add files from directories to the list of paths
@@ -71,9 +74,9 @@ namespace NmkdUtils.Extensions
             opts.AddHelpArgIfNotPresent();
             var pathCfg = new PathConfig();
 
-            void AddPathWithBasicValidation (string path)
+            void AddPathWithBasicValidation(string path)
             {
-                if(Assert(path.StartsWith('-'), () => opts.InvalidArgs.Add(path))) // Assume this is an argument; paths starting with a hyphen must be wrapped in quotes
+                if (Assert(path.StartsWith('-'), () => opts.InvalidArgs.Add(path))) // Assume this is an argument; paths starting with a hyphen must be wrapped in quotes
                     return;
 
                 // If path has no slashes, it must be relative, which we can check for in advance
@@ -223,16 +226,19 @@ namespace NmkdUtils.Extensions
                     continue;
                 }
 
-                string v = "";
+                string v = opt.OptionValueType != OptionValueType.None ? "<VALUE>" : "";
 
-                if(opt.OptionValueType != OptionValueType.None)
+                if (v.IsNotEmpty())
                 {
-                    if(opt.Description.EndsWith("|INT")) v = " <INT>";
-                    else if(opt.Description.EndsWith("|YN")) v = " <Y/N>";
-                    else if(opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
-                    else if(opt.Description.EndsWith("|WC")) v = " <WCARD>";
-                    // else if(opt.Description.EndsWith("|STR")) v = " <STRING>";
-                    else v = " <VALUE>";
+                    if (opt.Description.EndsWith("|YN")) v = " <Y/N>";
+                    else if (opt.Description.EndsWith("|INT")) v = " <INT>";
+                    else if (opt.Description.EndsWith("|INT,")) v = " <INTS>";
+                    else if (opt.Description.EndsWith("|FLT")) v = " <FLOAT>";
+                    else if (opt.Description.EndsWith("|FLT,")) v = " <FLOATS>";
+                    else if (opt.Description.EndsWith("|WC")) v = " <PATTERN>";
+                    else if (opt.Description.EndsWith("|WC,")) v = " <PATTERNS>";
+                    else if (opt.Description.EndsWith("|STR")) v = " <STRING>";
+                    else if (opt.Description.EndsWith("|STR,")) v = " <STRINGS>";
                 }
 
                 string desc = opt.Description.IsEmpty() ? "?" : opt.Description.Split('|')[0];
@@ -281,39 +287,35 @@ namespace NmkdUtils.Extensions
             }
         }
 
-        public static bool TryParseOptions(this Options opts, IEnumerable<string> args, bool returnFalseIfShowHelp = true, bool requiresAnyArgs = true)
+        public static bool TryParseOptions(this Options opts, IEnumerable<string> args, bool requiresAnyArgs = true)
         {
             try
             {
+                if(AssertErr(opts == null, "Tried parsing a null Options object."))
+                    return false;
+
+                bool hasAnyArgs = args.OrEmpty().Any();
+
+                if(!hasAnyArgs && !requiresAnyArgs)
+                    return true; // No arguments provided, but none are required, so return true
+
                 if (opts.AddHelpArg)
                 {
                     opts.AddHelpArgIfNotPresent();
                 }
 
                 Logger.WaitForEmptyQueue();
+                List<string> parsedArgs = hasAnyArgs ? opts.OptionsSet.Parse(args) : []; // This will throw an Exception if parsing fails, which we catch
 
-                bool hasAnyArgs = args.Any();
+                if(AssertErr(opts.InvalidArgs.Any(), $"Invalid arguments: {opts.InvalidArgs.Join(" ")}"))
+                    return false;
 
-                if (hasAnyArgs)
-                {
-                    var parsed = opts.OptionsSet.Parse(args);
-                }
-
-                if (opts.AlwaysPrintHelp || (!hasAnyArgs && opts.PrintHelpIfNoArgs))
+                if (!hasAnyArgs && opts.PrintHelpIfNoArgs)
                 {
                     opts.PrintHelp();
-
-                    if (returnFalseIfShowHelp)
-                        return false;
                 }
 
-                if (opts.InvalidArgs.Any())
-                {
-                    Logger.LogErr($"Invalid arguments: {opts.InvalidArgs.Join(" ")}");
-                    return false;
-                }
-
-                return !requiresAnyArgs || hasAnyArgs;
+                return true; // Successfully parsed options
             }
             catch (Exception ex)
             {
