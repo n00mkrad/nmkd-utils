@@ -73,7 +73,7 @@ namespace NmkdUtils
 
         static Logger()
         {
-            try { Console.OutputEncoding = Encoding.UTF8; } catch { }
+            Try(() => Console.OutputEncoding = Encoding.UTF8, catchAction: (ex) => Print($"Failed to set console output to UTF-8. {ex.Message}"));
             LogsDir = PathUtils.GetCommonSubdir(PathUtils.CommonDir.Logs);
             _debugger = Debugger.IsAttached;
             _loggingThread = new Thread(new ThreadStart(ProcessLogQueue)) { IsBackground = true };
@@ -112,15 +112,13 @@ namespace NmkdUtils
         }
 
         /// <summary> Log <paramref name="o"/> if <paramref name="condition"/> evaluates to true. </summary>
-        public static void LogConditional(object o, Func<bool> condition, Level level = Level.Info)
-        {
-            if (condition())
-            {
-                Log(o, level);
-            }
-        }
+        public static void LogConditional(object o, Func<bool> condition, Level level = Level.Info) => Log(o, level, condition: condition);
 
-        /// <summary> Enqueue a log entry with optional filtering and customization. </summary>
+        /// <summary>
+        /// Enqueue a log entry (<paramref name="o"/> will be converted to string) with the provided log <paramref name="level"/>. <br/> <paramref name="showTwiceTimeout"/> (ms) defines the wait before an identical message can be logged again. <br/>
+        /// <paramref name="condition"/> can be used to conditionally log the message, <paramref name="print"/> and <paramref name="toFile"/> can override printing to console and writing to the log file, ignoring <paramref name="level"/>. <br/>
+        /// <paramref name="customColor"/> can give the log entry a custom color when printed to console (no effect in file). <br/>
+        /// </summary>
         public static void Log(object o, Level level = Level.Info, int showTwiceTimeout = 0, string? replaceWildcard = null, Func<bool>? condition = null, bool? print = null, bool? toFile = null, ConsoleColor? customColor = null)
         {
             // Check if this is a Logger.Entry object since it should be enqueued, not turned into a string
@@ -206,9 +204,9 @@ namespace NmkdUtils
             {
                 string firstLinePrefix = PrintFullLevelNames ? $"[{level.ToString().Up().PadRight(_maxLogTypeStrLen, '.')}]" : $"[{_logLevelNames[level]}]";
                 PrefixLines(linesPrint, firstLinePrefix, trim: false);
-                string output = linesPrint.Join(Environment.NewLine);
+                string output = linesPrint.Join("\n");
                 string text = PrintLogLevel ? output : msgNoPrefix;
-                Console.ForegroundColor = entry.CustomColor == null ? _logLevelColors[level] : entry.CustomColor.Value; // Set custom color if given, otherwise use color based on log level
+                Console.ForegroundColor = entry.CustomColor ?? _logLevelColors[level]; // Set custom color if given, otherwise use color based on log level
                 bool replace = entry.ReplaceWildcard != null && LastLogMsgCon.MatchesWildcard(entry.ReplaceWildcard) && entry.Message.MatchesWildcard(entry.ReplaceWildcard);
                 Debug.WriteLineIf(_debugger, text);
                 CliUtils.Write(text, replace, resetColAfter: true);
@@ -253,5 +251,4 @@ namespace NmkdUtils
             Thread.Sleep(40);
         }
     }
-
 }

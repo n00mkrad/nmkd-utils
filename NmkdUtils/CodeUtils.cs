@@ -54,9 +54,9 @@ namespace NmkdUtils
 
         /// <summary>
         /// Try running an action, catch any exceptions, optionally log them. <paramref name="logEx"/> true = Always log exceptions, false = Never log exceptions, null = Log if no catchAction is provided. <br/>
-        /// Stack trace is not logged by default, but can be enabled with <paramref name="printTrace"/>. <br/>
+        /// An error description can be added with <paramref name="errNote"/>. Stack trace logging is disabled unless <paramref name="logTrace"/> is true. <br/>
         /// </summary>
-        public static bool Try(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null, string errNote = "", bool printTrace = false)
+        public static bool Try(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false)
         {
             if (tryAction == null)
                 return true;
@@ -70,7 +70,7 @@ namespace NmkdUtils
             {
                 if (logEx == true || (logEx == null && catchAction is null))
                 {
-                    Logger.Log(ex, errNote, printTrace);
+                    Logger.Log(ex, errNote, logTrace);
                 }
 
                 catchAction?.Invoke(ex);
@@ -78,8 +78,8 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> <inheritdoc cref="Try(Action, Action{Exception}, bool?, string, bool)"/> </summary>
-        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool printTrace = false)
+        /// <inheritdoc cref="Try(Action, Action{Exception}, bool?, string, bool)"/>
+        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false)
         {
             if (tryAction == null)
                 return default;
@@ -92,7 +92,7 @@ namespace NmkdUtils
             {
                 if (logEx == true || (logEx == null && catchAction is null))
                 {
-                    Logger.Log(ex, errNote, printTrace);
+                    Logger.Log(ex, errNote, logTrace);
                 }
 
                 if (catchAction != null)
@@ -120,6 +120,6 @@ namespace NmkdUtils
         }
 
         // Get enum values
-        public static List<T> GetEnumVals<T>() where T : Enum => Enum.GetValues(typeof(T)).Cast<T>().ToList();
+        public static List<T> GetEnums<T>() where T : Enum => Enum.GetValues(typeof(T)).Cast<T>().ToList();
     }
 }

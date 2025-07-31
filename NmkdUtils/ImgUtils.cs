@@ -413,7 +413,7 @@ namespace NmkdUtils
             int maxX = 0, maxY = 0;
 
             // If no crop color is provided, sample all edge positions and use the darkest/lowest color value as the base color
-            cropColor ??= cropColor = GetEnumVals<Position>().Select(tempImg.GetPixelAt).OrderBy(p => p.GetRgbAvg()).FirstOrDefault();
+            cropColor ??= cropColor = GetEnums<Position>().Select(tempImg.GetPixelAt).OrderBy(p => p.GetRgbAvg()).FirstOrDefault();
             var cropColorAvg = cropColor.Value.GetRgbAvg();
 
             // Find extents of any pixel above the threshold

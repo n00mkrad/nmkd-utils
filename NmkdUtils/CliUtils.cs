@@ -1,6 +1,5 @@
-﻿
-
-using static NmkdUtils.Logger;
+﻿using static NmkdUtils.Logger;
+using static NmkdUtils.CodeUtils;
 
 namespace NmkdUtils
 {
@@ -128,10 +127,8 @@ namespace NmkdUtils
         public static void PrintConsoleColors()
         {
             Log("Console Colors:");
-            foreach (ConsoleColor color in Enum.GetValues(typeof(ConsoleColor)))
-            {
-                Log(new Entry($"  This is ConsoleColor.{color}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.") { CustomColor = color, WriteToFile = false });
-            }
+            GetEnums<ConsoleColor>().ForEach(c => Log($"  This is ConsoleColor.{c}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.", customColor: c, toFile: false));
+            Logger.WaitForEmptyQueue();
             Console.ResetColor();
         }
     }
