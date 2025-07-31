@@ -34,7 +34,7 @@ namespace NmkdUtils
         public static readonly Regex TextInBracketsColon = new(@"\[(.*?)\]:?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Text in brackets; if there is leading space, it gets included </summary>
-        public static readonly Regex TextInBracketsWithOptLeadingSpace = new(@"\s?\[(.*?)\](?:\s(?=:))?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        public static readonly Regex TextInBracketsWithOptLeadingSpace = new(@"(?s)\s?\[(.*?)\](?:\s(?=:))?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
         public static readonly Regex TextInParenthesesLeadingSpaces = new(@"\s*\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
