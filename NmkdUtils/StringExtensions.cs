@@ -426,7 +426,7 @@ namespace NmkdUtils
             return new string(input.Where(c => !char.IsDigit(c)).ToArray());
         }
 
-        /// <summary> Replace all chars with an aterisk by default, or a custom censor char <paramref name="censorChar"/> </summary>
+        /// <summary> Replace all chars with <paramref name="censorChar"/> </summary>
         public static string Censor(this string s, char censorChar = '*')
         {
             if (s.IsEmpty())
@@ -452,7 +452,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Limit string to <paramref name="maxChars"/> chars, optionally using an <paramref name="ellipsis"/> for the first 3 chars if too long </summary>
-        public static string TruncLeft(this string s, int maxChars, bool ellipsis = true)
+        public static string TruncStart(this string s, int maxChars, bool ellipsis = true)
         {
             if (s.IsEmpty())
                 return s;
@@ -465,6 +465,26 @@ namespace NmkdUtils
             }
 
             return s;
+        }
+
+        /// <summary> Limit string to <paramref name="maxChars"/> chars, removing text from the middle, optionally using an <paramref name="ellipsis"/> if too long </summary>
+        public static string TruncMid(this string s, int maxChars, bool ellipsis = true)
+        {
+            if (s.IsEmpty())
+                return s;
+
+            // Return original if it's not longer than maxChars
+            if (s.Length <= maxChars)
+                return s;
+
+            // Calculate how many characters to keep
+            string middle = ellipsis && maxChars > 3 ? "..." : "";
+            int charsToKeep = maxChars - middle.Length;
+
+            // Calculate how many chars to keep from start and end
+            int startChars = charsToKeep / 2;
+            int endChars = charsToKeep - startChars; // Accounts for odd numbers
+            return string.Concat(s.AsSpan(0, startChars), middle, s.AsSpan(s.Length - endChars)); // Combine start, middle and end
         }
 
         /// <summary> Removes all specified chars from a string </summary>
@@ -523,24 +543,16 @@ namespace NmkdUtils
             return s.RegexReplace(withLeadingSpace ? Regexes.TextInParenthesesLeadingSpaces : Regexes.TextInParentheses);
         }
 
-        /// <summary>
-        /// Shortcut for string.Join(separator, source) with a default separator of ", ".
-        /// </summary>
+        /// <summary> Shortcut for string.Join(separator, source) with a default separator of ", ". </summary>
         public static string Join<T>(this IEnumerable<T> source, string separator = ", ")
-        {
-            return string.Join(separator, source);
-        }
+            => string.Join(separator, source);
 
         /// <summary> Wraps a string in an XML CDATA tag (opening and closing) </summary>
         public static string WrapXml(this object s, string tag, bool cdata = false)
-        {
-            return cdata ? $"<{tag}><![CDATA[{s}]]></{tag}>" : $"<{tag}>{s}</{tag}>";
-        }
+            => cdata ? $"<{tag}><![CDATA[{s}]]></{tag}>" : $"<{tag}>{s}</{tag}>";
 
         public static string ToStr(this Size size)
-        {
-            return $"{size.Width}x{size.Height}";
-        }
+            => $"{size.Width}x{size.Height}";
 
         /// <summary>
         /// Replaces consecutive spaces (or optionally, any whitespace characters if <paramref name="includeAnyWhitespace"/> is true) with a single space.
@@ -677,10 +689,16 @@ namespace NmkdUtils
         /// Extended Replace method, does not error if <paramref name="find"/> is empty, can be case-insensitive with <paramref name="ci"/>, <br/>
         /// can replace only the first occurence with <paramref name="firstOnly"/>.
         /// </summary>
-        public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false)
+        public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false, bool fullWord = false)
         {
             if (s.IsEmpty(false) || find.IsEmpty(false))
                 return s;
+
+            if (fullWord)
+            {
+                var rgx = new Regex($@"\b{Regex.Escape(find)}\b", ci ? RegexOptions.IgnoreCase : RegexOptions.None);
+                return rgx.Replace(s, replace, count: firstOnly ? 1 : int.MaxValue);
+            }
 
             if (firstOnly)
                 return s.ReplaceFirst(find, replace, caseIns: true);
