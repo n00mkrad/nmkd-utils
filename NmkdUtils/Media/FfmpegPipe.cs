@@ -1,6 +1,7 @@
 ﻿namespace NmkdUtils.Media;
 
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System;
@@ -13,13 +14,12 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-// using Stream = System.IO.Stream;
+using Image = SixLabors.ImageSharp.Image;
 
 public record VideoInfo(int Width, int Height, double Fps);
 
@@ -98,85 +98,66 @@ public static class FfmpegStreaming
 
         _ = Task.Run(async () =>
         {
-            var pixFmt = "rgba";
             var vf = scale.IsEmpty() ? "" : $" -vf scale={scale}";
             var kf = onlyKf ? $" -skip_frame nokey" : "";
             var frames = (maxFrames is int n && n > 0) ? $" -frames:v {n}" : "";
-            string argsIn = $"-loglevel error -hwaccel auto {kf} -i {path.Wrap()}";
-            string argsOut = $"{vf}{frames} -map 0:v:0 -vsync 0 -f rawvideo -pix_fmt {pixFmt} pipe:1";
+            string argsIn = $"-loglevel error {kf} -hwaccel auto -i {path.Wrap()}";
+            string argsOut = $"{vf}{frames} -map 0:v:0 -vsync 0 -f rawvideo -pix_fmt yuv420p pipe:1";
             string a = $"{argsIn}{argsOut}";
 
             var psi = new ProcessStartInfo { FileName = "ffmpeg", UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true, Arguments = a };
             using var p = Process.Start(psi)!;
 
-            var stdout = p.StandardOutput.BaseStream;
-            _ = Task.Run(async () => { // Drain stderr to avoid blocking on full pipe
-                var buf = new byte[8192];
-                while (!ct.IsCancellationRequested)
+            // Drain stderr so ffmpeg can't block on a full pipe
+            _ = Task.Run(async () =>
+            {
+                var tmp = new byte[8192];
+                while (true)
                 {
                     int n;
-                    try { n = await p.StandardError.BaseStream.ReadAsync(buf, 0, buf.Length, ct); }
+                    try { n = await p.StandardError.BaseStream.ReadAsync(tmp, 0, tmp.Length, ct); }
                     catch { break; }
                     if (n <= 0) break;
                 }
             }, ct);
 
-            // If you used -vf scale, actual output size may differ from probed size:
-            // int outW = info.Width, outH = info.Height;
-            // if (!string.IsNullOrWhiteSpace(scale))
-            // {
-            //     // If you set scale, consider probing again with -of lavfi or pass known target size here.
-            //     // For simplicity, assume scale is exact like "1280:720".
-            //     var parts = scale.Split(':');
-            //     if (parts.Length == 2 && int.TryParse(parts[0], out var sw) && int.TryParse(parts[1], out var sh))
-            //     { outW = sw; outH = sh; }
-            // }
+            var stdout = p.StandardOutput.BaseStream;
+            int ySize = outW * outH;
+            int cW = outW / 2, cH = outH / 2;
+            int cSize = cW * cH;
+            int frameSize = checked(ySize + cSize + cSize);
 
-            int frameSize = checked(outW * outH * 4);
             int index = 0;
-
             try
             {
-                while (true)
+                while (!ct.IsCancellationRequested)
                 {
-                    // rent a buffer for one frame
+                    if (maxFrames is > 0 && index >= maxFrames.Value) break;
+
                     var buf = ArrayPool<byte>.Shared.Rent(frameSize);
                     bool ok = await ReadExactlyAsync(stdout, buf, frameSize, ct);
-                    if (!ok)
-                    {
-                        ArrayPool<byte>.Shared.Return(buf);
-                        break;
-                    }
-
-                    double ts = (info.Fps > 0) ? (index / info.Fps) : (index * (1.0 / 30.0));
+                    if (!ok) { ArrayPool<byte>.Shared.Return(buf); break; }
 
                     var frame = new PooledFrame
                     {
                         Index = index,
-                        Buffer = buf,
-                        Length = frameSize,
                         Width = outW,
                         Height = outH,
-                        TimestampSec = ts
+                        TimestampSec = (info.Fps > 0) ? (index / info.Fps) : (index * (1.0 / 24.0)),
+                        Buffer = buf,
+                        Length = frameSize
                     };
 
                     await channel.Writer.WriteAsync(frame, ct);
                     index++;
                 }
             }
-            catch (OperationCanceledException) { /* cancelled */ }
+            catch (OperationCanceledException) { }
             finally
             {
                 channel.Writer.TryComplete();
-                try
-                {
-                    if (!p.HasExited)
-                    {
-                        try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
-                        await p.WaitForExitAsync(CancellationToken.None);
-                    }
-                }
-                catch { /* ignore */ }
+                try { if (!p.HasExited) p.Kill(entireProcessTree: true); } catch { }
+                try { await p.WaitForExitAsync(CancellationToken.None); } catch { }
             }
         }, ct);
 
@@ -205,92 +186,212 @@ public static class FfmpegStreaming
         return true;
     }
 
-    public static Bitmap ToBitmapBgra32(PooledFrame frame)
-    {
-        var bmp = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppArgb);
-        var rect = new System.Drawing.Rectangle(0, 0, frame.Width, frame.Height);
-        var data = bmp.LockBits(rect, ImageLockMode.WriteOnly, bmp.PixelFormat);
-        try
-        {
-            int bytes = frame.Width * frame.Height * 4;
-            Marshal.Copy(frame.Buffer, 0, data.Scan0, bytes);
-        }
-        finally
-        {
-            bmp.UnlockBits(data);
-        }
-        return bmp;
-    }
+    public static Image<Rgba32> ToImageRgba32(PooledFrame f) => Image.LoadPixelData<Rgba32>(f.Buffer.AsSpan(0, f.Length), f.Width, f.Height);
+    public static Image<Rgba32> ToImageYuv420(PooledFrame f) => FromYuv420Bytes(f.Buffer.AsSpan(0, f.Length), f.Width, f.Height);
 
-    public static Image<Bgr24> ToImageSharpBgr24(PooledFrame frame)
-    {
-        // Cast bytes → Bgr24 pixels (no per-pixel loops).
-        var pixelSpan = MemoryMarshal.Cast<byte, Bgr24>(frame.Span);
-        // This copies into ImageSharp’s buffers (safe with ArrayPool).
-        return SixLabors.ImageSharp.Image.LoadPixelData<Bgr24>(pixelSpan, frame.Width, frame.Height);
-    }
-
-    public static Image<Bgra32> ToImageBgra32(PooledFrame f)
-    {
-        // Copies pixel data into ImageSharp-managed memory
-        return SixLabors.ImageSharp.Image.LoadPixelData<Bgra32>(f.Buffer.AsSpan(0, f.Length), f.Width, f.Height);
-    }
-
-    public static Image<Rgba32> ToImageRgba32(PooledFrame f)
-    {
-        return SixLabors.ImageSharp.Image.LoadPixelData<Rgba32>(f.Buffer.AsSpan(0, f.Length), f.Width, f.Height);
-    }
-
-    public static async Task Test()
+    public static async Task Test(IEnumerable<string> args)
     {
         var sw = Stopwatch.StartNew();
-        ConcurrentDictionary<int, float> frameLuma = [];
+        ConcurrentDictionary<int, float> frameLumaMax = [];
+        ConcurrentDictionary<int, float> frameLumaAvg = [];
         void frameAction(PooledFrame frame, int workerId)
         {
-            using var img = ToImageRgba32(frame);
-            img.Mutate(x => x.Resize(new ResizeOptions() { Size = new SixLabors.ImageSharp.Size(1, 1), Mode = ResizeMode.Stretch }));
-            frameLuma[frame.Index] = img[0, 0].GetRec709Luminance();
+            float maxLuma = 0f;
+            using var img = ToImageYuv420(frame);
+
+            // Apply GetRec709Luminance on all pixels and average
+            float totalLuma = 0f;
+            img.ProcessPixelRows(pa =>
+            {
+                for (int y = 0; y < pa.Height; y++)
+                {
+                    var row = pa.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        var luma = row[x].GetRec709Luminance();
+
+                        if (luma > maxLuma)
+                            maxLuma = luma;
+
+                        totalLuma += luma;
+                    }
+                }
+            });
+
+            var avgLuma = totalLuma / (img.Width * img.Height);
+
+            if (avgLuma < 0.005 || avgLuma > 0.995)
+                return; // Skip pure black/white frames
+
+            frameLumaMax[frame.Index] = maxLuma;
+            frameLumaAvg[frame.Index] = avgLuma;
         }
-        string path = @"\\NAS\media\Shows\Fallout (2024)\S01\Fallout.S01E01.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv";
-        await Test(path, frameAction, onlyKf: true);
-        Logger.Log($"Processed {frameLuma.Keys.Count} frames in {sw.Format()}, FPS = {Math.Round(frameLuma.Keys.Count / sw.Elapsed.TotalSeconds, 2)}");
-        Logger.Log($"Brightness ({frameLuma.Count} samples) avg: {frameLuma.Values.Average():P1}, max: {frameLuma.Values.Max():P1}");
-        Logger.Log($"Brightness (8-bit) avg: {(frameLuma.Values.Average() * 255f).Round()}, max: {(frameLuma.Values.Max() * 255f).Round()}");
+        string path = args.First(File.Exists);
+        await Test(path, frameAction, onlyKf: true, logBufferStats: true);
+        Logger.Log($"Processed {frameLumaMax.Keys.Count} frames in {sw.Format()}, FPS = {Math.Round(frameLumaMax.Keys.Count / sw.Elapsed.TotalSeconds, 2)}");
+        Logger.Log($"Peak Brightness avg: {frameLumaMax.Values.Average():P1}, max: {frameLumaMax.Values.Max():P1}");
+        Logger.Log($"Peak Brightness (8-bit) avg: {(frameLumaMax.Values.Average() * 255f).Round()}, max: {(frameLumaMax.Values.Max() * 255f).Round()}");
+        Logger.Log($"Frame Brightness avg: {frameLumaAvg.Values.Average():P1}, max: {frameLumaAvg.Values.Max():P1}");
+        Logger.Log($"Frame Brightness (8-bit) avg: {(frameLumaAvg.Values.Average() * 255f).Round()}, max: {(frameLumaAvg.Values.Max() * 255f).Round()}");
+
+        int binning = 2;
+        int plotH = (frameLumaMax.Keys.Count / binning) / 2;
+        var plotMax = ImgUtils.RenderColumnPlot(frameLumaMax, plotH, binning, maxValue: 1, barColor: new Rgba32(0, 74, 127, 255), backgroundColor: new Rgba32(0, 0, 0, 0));
+        var plotAvg = ImgUtils.RenderColumnPlot(frameLumaAvg, plotH, binning, maxValue: 1, barColor: new Rgba32(0, 148, 255, 255), backgroundColor: new Rgba32(0, 0, 0, 0));
+        ImgUtils.LayerImages([plotMax, plotAvg]).SaveImg($"{path}.Brightness.png", ImgUtils.Format.Png, overwrite: true, dispose: true);
     }
 
-    public static async Task Test(string path, Action<PooledFrame, int> frameAction, string scale = "1280:-2", bool onlyKf = false, int? maxFrames = null, int? bufferSize = null, CancellationToken ct = default)
+    public static async Task Test(string path, Action<PooledFrame, int> frameAction, string scale = "480:-2", bool onlyKf = false, int? maxFrames = null, int? bufferSize = null, bool logBufferStats = false, CancellationToken ct = default)
     {
         var info = await FfmpegStreaming.ProbeAsync(path);
 
-        bufferSize ??= 512; // Default: width*height*channels * 24 bytes
+        bufferSize ??= 256; // Default: width*height*channels * 24 bytes
         var cts = ct.CanBeCanceled ? CancellationTokenSource.CreateLinkedTokenSource(ct) : new CancellationTokenSource();
-        
+
         var channel = FfmpegStreaming.StartDecodeToChannel(path, info, maxFrames, bufferSize: (int)bufferSize, onlyKf, scale, ct: cts.Token);
 
+        // Track buffer statistics
+        int processedCount = 0;
+        int highestFrameIndex = -1;
+
+        if (logBufferStats)
+        {
+            _ = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    int producedCount = highestFrameIndex + 1; // +1 because index is 0-based
+                    int inBuffer = Math.Max(0, producedCount - processedCount);
+                    double fullness = (double)inBuffer / bufferSize.Value;
+                    Logger.Log($"Buffer fullness: {inBuffer}/{bufferSize.Value} ({fullness:P1})", condition: () => inBuffer >= 12);
+                    await Task.Delay(1000, cts.Token);
+                }
+            }, cts.Token);
+        }
+
         // Spin up workers
-        int workers = 64; // Math.Max(2, Environment.ProcessorCount - 2);
+        int workers = Math.Max(2, Environment.ProcessorCount - 2);
+        Logger.Log($"Starting {workers} worker tasks");
         var tasks = Enumerable.Range(0, workers).Select(workerId => Task.Run(async () =>
         {
             await foreach (var frame in channel.Reader.ReadAllAsync(cts.Token))
             {
+                // Update the highest frame index we've seen
+                Interlocked.Exchange(ref highestFrameIndex, Math.Max(highestFrameIndex, frame.Index));
+
                 try
                 {
-                    // Build an ImageSharp image (this copies the frame's bytes into the image)
-                    if(frame.Index % 100 == 0)
-                        Logger.Log($"Worker {workerId.ZPad(3)}: Frame {frame.Index.ZPad(6)} at {frame.TimestampSec:F2}s - {FormatUtils.FileSize(frame.Buffer.LongLength)}");
-                    
-                    // Execute the provided action on the frame
-                    frameAction(frame, workerId);
+                    if (frame.Index % 500 == 0)
+                        Logger.Log($"Worker {workerId.ZPad(3)}: Frame {frame.Index.ZPad(5)} at {FormatUtils.Time(frame.TimestampSec * 1000)} - {FormatUtils.FileSize(frame.Buffer.LongLength)}");
+
+                    frameAction(frame, workerId); // Execute the provided action on the frame
                 }
                 finally
                 {
-                    // Always return the pooled buffer
-                    frame.Dispose();
+                    Interlocked.Increment(ref processedCount);
+                    frame.Dispose(); // Always return the pooled buffer
                 }
             }
         }, cts.Token)).ToArray();
-        
+
         await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    /// Converts one YUV420p frame (contiguous Y|U|V planes) to an Rgba32 ImageSharp Image.
+    /// buffer.Length must be width*height*3/2. Width/Height should be even.
+    /// </summary>
+    public static Image<Rgba32> FromYuv420Bytes(ReadOnlySpan<byte> buffer, int width, int height, bool bt709 = false, bool limitedRange = true)
+    {
+        if ((width & 1) != 0 || (height & 1) != 0)
+            throw new ArgumentException("YUV420p requires even width and height.");
+
+        int ySize = width * height;
+        int cW = width / 2, cH = height / 2;
+        int cSize = cW * cH;
+        if (buffer.Length < ySize + 2 * cSize)
+            throw new ArgumentException("Buffer size does not match YUV420p frame.");
+
+        var yPlane = buffer[..ySize];
+        var uPlane = buffer.Slice(ySize, cSize);
+        var vPlane = buffer.Slice(ySize + cSize, cSize);
+
+        // Coefficients (fixed-point, scale = 256)
+        int yMul, yOff, rV, gU, gV, bU;
+        if (limitedRange)
+        {
+            yMul = 298; yOff = 16;
+            if (bt709) { rV = 459; gU = -55; gV = -136; bU = 541; }        // BT.709
+            else { rV = 409; gU = -100; gV = -208; bU = 516; }       // BT.601
+        }
+        else
+        {
+            yMul = 256; yOff = 0;   // JPEG/full range
+            rV = 359; gU = -88; gV = -183; bU = 453;
+        }
+
+        static byte Clip(int x) => (byte)(x < 0 ? 0 : (x > 255 ? 255 : x));
+
+        var img = new Image<Rgba32>(width, height);
+
+        for (int y = 0; y < height; y += 2)
+        {
+            var row0 = img.DangerousGetPixelRowMemory(y).Span;
+            var row1 = img.DangerousGetPixelRowMemory(y + 1).Span;
+
+            int yRow0 = y * width;
+            int yRow1 = (y + 1) * width;
+            int cRow = (y / 2) * cW;
+
+            for (int x = 0; x < width; x += 2)
+            {
+                int cIdx = cRow + (x / 2);
+                int U = uPlane[cIdx] - 128;
+                int V = vPlane[cIdx] - 128;
+
+                // Precompute chroma terms
+                int rC = rV * V;
+                int gC = gU * U + gV * V;
+                int bC = bU * U;
+
+                // Y samples for 2x2 block
+                int C00 = (yPlane[yRow0 + x] - yOff) * yMul;
+                int C01 = (yPlane[yRow0 + x + 1] - yOff) * yMul;
+                int C10 = (yPlane[yRow1 + x] - yOff) * yMul;
+                int C11 = (yPlane[yRow1 + x + 1] - yOff) * yMul;
+
+                // Top-left
+                {
+                    int R = (C00 + rC + 128) >> 8;
+                    int G = (C00 + gC + 128) >> 8;
+                    int B = (C00 + bC + 128) >> 8;
+                    row0[x] = new Rgba32(Clip(R), Clip(G), Clip(B), 255);
+                }
+                // Top-right
+                {
+                    int R = (C01 + rC + 128) >> 8;
+                    int G = (C01 + gC + 128) >> 8;
+                    int B = (C01 + bC + 128) >> 8;
+                    row0[x + 1] = new Rgba32(Clip(R), Clip(G), Clip(B), 255);
+                }
+                // Bottom-left
+                {
+                    int R = (C10 + rC + 128) >> 8;
+                    int G = (C10 + gC + 128) >> 8;
+                    int B = (C10 + bC + 128) >> 8;
+                    row1[x] = new Rgba32(Clip(R), Clip(G), Clip(B), 255);
+                }
+                // Bottom-right
+                {
+                    int R = (C11 + rC + 128) >> 8;
+                    int G = (C11 + gC + 128) >> 8;
+                    int B = (C11 + bC + 128) >> 8;
+                    row1[x + 1] = new Rgba32(Clip(R), Clip(G), Clip(B), 255);
+                }
+            }
+        }
+
+        return img; // caller owns/Dispose() when done
     }
 }
 
