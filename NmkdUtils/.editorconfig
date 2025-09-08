@@ -38,3 +38,6 @@ dotnet_diagnostic.IDE0057.severity = none
 
 # CA1416: Validate platform compatibility
 dotnet_diagnostic.CA1416.severity = none
+
+# CS0419: Ambiguous reference in cref attribute
+dotnet_diagnostic.CS0419.severity = silent
