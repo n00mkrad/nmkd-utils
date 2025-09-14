@@ -25,7 +25,7 @@ namespace NmkdUtils
             return null;
         }
 
-        /// <summary> Sorts file path strings. </summary>
+        /// <summary> Sorts file paths. </summary>
         public static IEnumerable<string> SortFiles(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
         {
             if (mode == Enums.Sort.None) return paths;
@@ -40,19 +40,17 @@ namespace NmkdUtils
             return paths;
         }
 
-        /// <summary> Sorts files. </summary>
-        public static IEnumerable<FileInfo> SortFiles(IEnumerable<FileInfo> files, Enums.Sort mode = Enums.Sort.AToZ)
+        /// <summary> Sorts directory paths. Sorting by size is not supported. </summary>
+        public static IEnumerable<string> SortDirs(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
         {
-            if (mode == Enums.Sort.None) return files;
-            if (mode == Enums.Sort.AToZ) return files.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
-            if (mode == Enums.Sort.ZToA) return files.OrderByDescending(p => p.Name, StringComparer.OrdinalIgnoreCase);
-            if (mode == Enums.Sort.Newest) return files.OrderByDescending(p => p.LastWriteTime);
-            if (mode == Enums.Sort.Oldest) return files.OrderBy(p => p.LastWriteTime);
-            if (mode == Enums.Sort.Biggest) return files.OrderByDescending(p => p.Length);
-            if (mode == Enums.Sort.Smallest) return files.OrderBy(p => p.Length);
-            if (mode == Enums.Sort.Longest) return files.OrderByDescending(p => p.FullName.Length);
-            if (mode == Enums.Sort.Shortest) return files.OrderBy(p => p.FullName.Length);
-            return files;
+            if (mode == Enums.Sort.None) return paths;
+            if (mode == Enums.Sort.AToZ) return paths.OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.ZToA) return paths.OrderByDescending(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+            if (mode == Enums.Sort.Newest) return paths.OrderByDescending(d => new DirectoryInfo(d).LastWriteTime);
+            if (mode == Enums.Sort.Oldest) return paths.OrderBy(d => new DirectoryInfo(d).LastWriteTime);
+            if (mode == Enums.Sort.Longest) return paths.OrderByDescending(d => d.Length);
+            if (mode == Enums.Sort.Shortest) return paths.OrderBy(d => d.Length);
+            return paths;
         }
 
         /// <summary>
@@ -82,6 +80,30 @@ namespace NmkdUtils
         /// <summary> Get files as a sorted FileInfo List </summary>
         public static List<FileInfo> GetFiles(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ)
             => GetFilePaths(path, recursive, pattern, sort).Select(p => Try(() => new FileInfo(p))).ToList();
+
+        /// <summary>
+        /// Get directory paths as a sorted string List.
+        /// When recursive is true, maxDepth can be used to limit how deep in the directory structure to search (0 = current directory only).
+        /// </summary>
+        public static List<string> GetDirPaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = 1)
+        {
+            try
+            {
+                if (path.IsEmpty() || !Directory.Exists(path))
+                    return [];
+
+                SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                List<string> paths = SortDirs(Directory.GetDirectories(path, pattern, opt), sort).ToList();
+                int rootDepth = GetPathPartCount(Path.GetFullPath(path), false);
+                paths = paths.Where(p => (GetPathPartCount(p, false) - rootDepth) <= maxDepth).ToList(); // For directories, include the directory name in depth calculation (excludeFile: false)
+                return paths;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, "Failed to get directories");
+                return [];
+            }
+        }
 
         /// <summary> Get directories sorted by name (manual recursion to ignore inaccessible entries) </summary>
         public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = true)
@@ -146,11 +168,17 @@ namespace NmkdUtils
 
         /// <summary> Sends a file to the recycle bin. Returns success bool. </summary>
         private static bool RecycleFile(string path, bool logEx = false)
-            => Try(() => FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin), logEx: logEx);
+            => Try(() => RecycleFileBackground(path), logEx: logEx);
 
         /// <summary> Sends a folder to the recycle bin. Returns success bool. </summary>
         public static bool RecycleDir(string path, bool logEx = false)
-            => Try(() => FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin), logEx: logEx);
+            => Try(() => RecycleDirBackground(path), logEx: logEx);
+
+        private static void RecycleFileBackground(string path)
+            => Jobs.Fire(() => FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin));
+
+        private static void RecycleDirBackground(string path)
+            => Jobs.Fire(() => FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin));
 
         /// <summary> Deletes a file (or sends it to recycle bin if <paramref name="recycle"/> is true). Only logs the file if <paramref name="dryRun"/> is true. </summary>
         public static void DeleteFile(string path, bool recycle = false, bool dryRun = false, Logger.Level logLvl = Logger.Level.Verbose)
@@ -176,16 +204,20 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> Deletes a file or directory (or sends it to recycle bin if <paramref name="recycle"/> is true). Only logs the files that would be deleted if <paramref name="dryRun"/> is true. </summary>
+        /// <summary>
+        /// Deletes a file or directory or sends it to recycle bin. <br/>
+        /// If <paramref name="ignoreExceptions"/> is true, exceptions are ignored fully, if null, they are only logged, if false, they are thrown. <br/>
+        /// If <paramref name="dryRun"/> is true, no files are actually deleted, only logged.
+        /// </summary>
         public static void Delete(string path, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false)
         {
             if (File.Exists(path))
             {
-                DeleteFile(path, recycle, dryRun);
+                Try(() => DeleteFile(path, recycle, dryRun));
             }
             else if (Directory.Exists(path))
             {
-                DeleteDirectory(path, ignoreExceptions, recycle, dryRun);
+                Try(() => DeleteDirectory(path, ignoreExceptions, recycle, dryRun));
             }
             else
             {
@@ -193,6 +225,18 @@ namespace NmkdUtils
                 return;
             }
         }
+
+        /// <inheritdoc cref="Delete(string, bool?, bool, bool)"/>
+        public static void Delete(IEnumerable<string> paths, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false) =>
+            paths.ToList().ForEach(p => Delete(p, ignoreExceptions, recycle, dryRun));
+
+        /// <inheritdoc cref="Delete(string, bool?, bool, bool)"/>
+        public static void Delete(IEnumerable<FileInfo> files, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false) =>
+            files.ToList().ForEach(f => Delete(f.FullName, ignoreExceptions, recycle, dryRun));
+
+        /// <inheritdoc cref="Delete(string, bool?, bool, bool)"/>
+        public static void Delete(IEnumerable<DirectoryInfo> dirs, bool? ignoreExceptions = true, bool recycle = false, bool dryRun = false) =>
+            dirs.ToList().ForEach(d => Delete(d.FullName, ignoreExceptions, recycle, dryRun));
 
         /// <summary>
         /// Deletes a directory and its contents or sends it to recycle bin. <br/>
@@ -256,10 +300,13 @@ namespace NmkdUtils
         public static List<string> ReadTextLines(string path, bool ommitEmptyLines = false) => ReadTextFile(path).GetLines(ommitEmptyLines);
 
         /// <summary> More reliable alternative to File.ReadAllText, should work for files that are being accessed from another process </summary>
-        public static string ReadTextFile(string path)
+        public static string ReadTextFile(string path, string fallback = "")
         {
             try
             {
+                if (!File.Exists(path))
+                    return fallback;
+
                 using FileStream fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using StreamReader reader = new StreamReader(fileStream);
                 return reader.ReadToEnd();
@@ -267,7 +314,7 @@ namespace NmkdUtils
             catch (Exception ex)
             {
                 Logger.Log(ex, $"Failed to read file '{path}'");
-                return "";
+                return fallback;
             }
         }
 
@@ -327,40 +374,47 @@ namespace NmkdUtils
         /// <inheritdoc cref="GetPseudoHash(FileInfo)"/>
         public static string GetPseudoHash(string file) => GetPseudoHash(new FileInfo(file));
 
-        /// <summary> Calculate size of a directory in bytes. </summary>
-        public static long GetDirSize(string path, bool recursive = true, IEnumerable<string>? patterns = null)
+        /// <summary> Gets the combined size of all files in <paramref name="directory"/> in bytes, multithreaded. </summary>
+        public static long GetDirSize(DirectoryInfo directory, int? threads = null)
         {
-            IEnumerable<string> files = Directory.EnumerateFiles(path, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-            files = patterns == null ? files : files.Where(f => patterns.Any(pattern => f.MatchesWildcard(pattern)));
-
+            threads ??= Environment.ProcessorCount;
             long totalSize = 0;
-            foreach (string file in files)
+
+            try
             {
-                try
+                FileInfo[] files = Try(directory.GetFiles);
+                // Logger.LogWrn($"{directory.FullName}: {ex.Message}");
+
+                files.Where(f => (f.Attributes & FileAttributes.ReparsePoint) != FileAttributes.ReparsePoint).ParallelForEach(f =>
                 {
-                    totalSize += new FileInfo(file).Length;
-                }
-                catch (UnauthorizedAccessException)
+                    Try(() => Interlocked.Add(ref totalSize, f.Length));
+                }, threads);
+
+                DirectoryInfo[] subdirectories = Try(directory.GetDirectories);
+                subdirectories.Where(d => (d.Attributes & FileAttributes.ReparsePoint) != FileAttributes.ReparsePoint).ParallelForEach(subdir =>
                 {
-                    // Skip files we can't read, no need to log this
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log(ex, $"Error getting size of file '{file}'");
-                }
+                    long subdirSize = Try(() => GetDirSize(subdir, threads));
+                    Interlocked.Add(ref totalSize, subdirSize);
+                }, threads);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Failed to get size of {directory.FullName}");
             }
 
             return totalSize;
         }
+        public static long GetDirSize(string dir, int? threads = null)
+            => GetDirSize(new DirectoryInfo(dir), threads);
 
 
         /// <summary> Get size of a file or directory, null on failure. </summary>
-        public static long? GetPathSize(string path, bool recursive = true)
+        public static long? GetPathSize(string path)
         {
             try
             {
                 bool isFile = File.Exists(path);
-                return isFile ? new FileInfo(path).Length : GetDirSize(path, recursive);
+                return isFile ? new FileInfo(path).Length : GetDirSize(path);
             }
             catch
             {
@@ -503,7 +557,7 @@ namespace NmkdUtils
         /// <summary>
         /// Writes a dictionary to a file in the format "key=value"
         /// </summary>
-        public static void WriteDictToFile<TKey, TValue>(Dictionary<TKey, TValue> dict, string path)
+        public static void WriteDictToFile<TKey, TValue>(Dictionary<TKey, TValue> dict, string path) where TKey : notnull
         {
             var lines = dict.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
             File.WriteAllLines(path, lines);
@@ -575,11 +629,9 @@ namespace NmkdUtils
             return new Bitmap(img); // clones it in memory.
         }
 
-        public static string GetProgram(string executable, bool allowPrompt = false) => GetProgram(executable, ref Settings.CommandPathsDict, allowPrompt);
-
         /// <summary> Gets the path to an executable by checking (in order): Config, environment (PATH), common installation directories. <br/>
-        /// If not found, it can prompt the user for a path (<paramref name="allowInteraction"/>). This user-provided path gets saved in the config by default (<paramref name="allowWriteBack"/>) </summary>
-        public static string GetProgram(string executable, ref Dictionary<string, string>? configDict, bool allowInteraction = false, bool allowWriteBack = true)
+        /// If not found, it can prompt the user for a path (<paramref name="allowPrompt"/>). This user-provided path gets saved in the config by default (<paramref name="allowWriteBack"/>) </summary>
+        public static string GetProgram(string executable, bool allowPrompt = false, bool allowWriteBack = true)
         {
             if (executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 executable = executable.Remove(executable.Length - 4);
@@ -591,7 +643,7 @@ namespace NmkdUtils
             }
 
             // 1) Check config
-            if (configDict != null && configDict.Get(executable, out var confPath, "") && File.Exists(confPath))
+            if (Settings.CommandPaths != null && Settings.CommandPaths.Get(executable, out var confPath, "") && File.Exists(confPath))
                 return confPath;
 
             // 2) Check if in PATH
@@ -614,7 +666,7 @@ namespace NmkdUtils
                     {
                         if (allowWriteBack)
                         {
-                            configDict.Set(executable, exePath);
+                            Settings.CommandPaths.Set(executable, exePath);
                         }
 
                         Logger.Log($"Using {executable}.exe from common install dir: {exePath}", Logger.Level.Debug);
@@ -625,7 +677,7 @@ namespace NmkdUtils
                 }
             }
 
-            if (!allowInteraction)
+            if (!allowPrompt)
             {
                 Logger.Log($"Could not find {executable}.", Logger.Level.Debug);
                 return "";
@@ -638,14 +690,14 @@ namespace NmkdUtils
 
             if (File.Exists(GetExePath(userCommand, out string pInput)) || Path.Exists(OsUtils.GetEnvExecutable(userCommand).FirstOrDefault("")))
             {
-                if (configDict == null)
+                if (Settings.CommandPaths == null)
                     return pInput;
 
                 bool save = CliUtils.ReadLine($"Save this {executable} command to config? (Y/N)").Trim().Low() == "y";
 
                 if (save)
                 {
-                    configDict[executable] = pInput;
+                    Settings.CommandPaths[executable] = pInput;
                 }
 
                 return pInput;
@@ -688,7 +740,7 @@ namespace NmkdUtils
 
             public PathHierarchyComparer(bool dirsFirst) { _foldersFirst = dirsFirst; }
 
-            public int Compare(FileSystemInfo x, FileSystemInfo y)
+            public int Compare(FileSystemInfo? x, FileSystemInfo? y)
             {
                 if (ReferenceEquals(x, y)) return 0;
                 if (x is null) return -1;

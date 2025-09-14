@@ -1,5 +1,5 @@
-﻿using Newtonsoft.Json.Linq;
-using System.Collections;
+﻿using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -25,6 +25,18 @@ namespace NmkdUtils
                 return fallback;
 
             return list[index];
+        }
+
+        /// <summary> Sets <paramref name="value"/> to the element at the given <paramref name="index"/>, if there is none, to <paramref name="fallback"/>. <br/> Returns whether the item was found or not. </summary>
+        public static bool TryAt<T>(this IList<T>? list, int index, out T? value, T? fallback = default)
+        {
+            value = fallback;
+
+            if (list == null || index < 0 || index > (list.Count - 1))
+                return false;
+
+            value = list[index];
+            return true;
         }
 
         /// <summary> Get a value from a dictionary, returns <paramref name="fallback"/> if not found. For strings, the default fallback is an empty string instead of null. </summary>
@@ -72,6 +84,35 @@ namespace NmkdUtils
             return fallback;
         }
 
+        /// <summary> Gets a value from a list that matches the provided predicate; returns <paramref name="fallback"/> if not found. </summary>
+        public static T Get<T>(this IList<T>? list, Predicate<T> pred, T? fallback = default)
+        {
+            if (list == null)
+                return fallback;
+
+            return list.FirstOrDefault(x => pred(x), defaultValue: fallback);
+        }
+
+        /// <summary> Gets a value from a list that matches the provided predicate; returns <paramref name="fallback"/> if not found. Return value indicates whether the item was found or not. </summary>
+        public static bool TryGet<T>(this IList<T>? list, Predicate<T> pred, out T? value, T? fallback = default)
+        {
+            value = fallback;
+
+            if (list == null)
+                return false;
+
+            foreach (var item in list)
+            {
+                if (pred(item))
+                {
+                    value = item;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <inheritdoc cref="Get{T}"/>
         public static bool Get<T>(this IList<T>? list, int index, out T? value, T? fallback = default)
         {
@@ -106,7 +147,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Adds a <paramref name="value"/> to a dictionary of lists; creates a new list if there is none yet. </summary>
-        public static void AddToList<TKey, TValue>(this Dictionary<TKey, List<TValue>> dict, TKey key, TValue value)
+        public static void AddToList<TKey, TValue>(this Dictionary<TKey, List<TValue>> dict, TKey key, TValue value) where TKey : notnull
         {
             // Check if the dictionary already contains the key
             if (dict.ContainsKey(key))
@@ -189,6 +230,10 @@ namespace NmkdUtils
         public static bool HasAny<T>(this IEnumerable<T> source, bool nullAsEmpty = true)
             => nullAsEmpty ? source.OrEmpty().Any() : source.Any();
 
+        /// <summary> Checks if all items in a collection are the same (and not empty) </summary>
+        public static bool AllSame<T>(this IEnumerable<T> source, bool nullAsEmpty = true)
+            => (nullAsEmpty ? source.OrEmpty() : source).Distinct().Count() == 1;
+
         /// <summary> Gets the single most common item using a <paramref name="selector"/> </summary>
         public static T MostCommonBy<T, TProperty>(this IEnumerable<T> list, Func<T, TProperty> selector)
             => list.MostCommonGroupBy(selector).FirstOrDefault();
@@ -203,7 +248,7 @@ namespace NmkdUtils
         }
 
         /// <summary> Order a list by how common each item is (first = most common), preserving the original order within each group. </summary>
-        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list, out int mostCommonCount)
+        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list, out int mostCommonCount) where T : notnull
         {
             mostCommonCount = 0;
             if (list.None())
@@ -214,10 +259,57 @@ namespace NmkdUtils
             return list.OrderByDescending(x => counts[x]); // Stable sort original sequence by descending count
         }
         /// <inheritdoc cref="OrderByFreq{T}(IEnumerable{T}, out int)"/>
-        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list)
+        public static IEnumerable<T> OrderByFreq<T>(this IEnumerable<T> list) where T : notnull
             => OrderByFreq(list, out _);
 
+        /// <summary> Same as ToList but casts all items to object. </summary>
         public static List<object> ToObjectList(this IEnumerable source) => source.Cast<object>().ToList();
+
+        /// <summary> Maps the value using the specified function and returns the result. </summary>
+        public static TOut Map<TIn, TOut>(this TIn value, Func<TIn, TOut> map) => map(value);
+
+        /// <summary> Performs an action before passing the value along. </summary>
+        public static T Tap<T>(this T value, Action<T> action)
+        {
+            action(value);
+            return value;
+        }
+
+        /// <summary> Orders by multiple keys, in the provided sequence, all ascending or <paramref name="desc"/>. </summary>
+        public static IOrderedEnumerable<T> OrderByMany<T>(this IEnumerable<T> source, bool desc = false, params Func<T, object?>[] keySelectors)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            if (keySelectors is null || keySelectors.Length == 0)
+                throw new ArgumentException("At least one key selector is required.", nameof(keySelectors));
+
+            IOrderedEnumerable<T>? result = null;
+
+            for (var i = 0; i < keySelectors.Length; i++)
+            {
+                var key = keySelectors[i];
+                result = i == 0 ? (desc ? Enumerable.OrderByDescending(source, key) : Enumerable.OrderBy(source, key)) : (desc ? Enumerable.ThenByDescending(result!, key) : Enumerable.ThenBy(result!, key));
+            }
+
+            return result!;
+        }
+
+        /// <summary> Orders by multiple keys, in the provided sequence, with the provided direction for each key (true = descending, false = ascending). </summary>
+        public static IOrderedEnumerable<T> OrderByMany<T>(this IEnumerable<T> source, params (Func<T, object?> KeySelector, bool Descending)[] orderings)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            if (orderings is null || orderings.Length == 0)
+                throw new ArgumentException("At least one ordering is required.", nameof(orderings));
+
+            IOrderedEnumerable<T>? result = null;
+
+            for (var i = 0; i < orderings.Length; i++)
+            {
+                var (key, desc) = orderings[i];
+                result = i == 0 ? (desc ? Enumerable.OrderByDescending(source, key) : Enumerable.OrderBy(source, key)) : (desc ? Enumerable.ThenByDescending(result!, key) : Enumerable.ThenBy(result!, key));
+            }
+
+            return result!;
+        }
 
         #endregion
 
@@ -354,20 +446,27 @@ namespace NmkdUtils
         }
 
         /// <summary> Shortcut for Parallel.ForEach with threads parameter </summary>
-        public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int? threads = null)
+        public static void ParallelForEach<T>(this IEnumerable<T> source, Action<T> action, int? threads = null, bool time = false)
         {
             threads ??= Environment.ProcessorCount;
+            Stopwatch sw = time ? Stopwatch.StartNew() : null; // Optional benchmark timer
 
-            if (threads == 1)
+            if (threads == 1) // Sequential if only 1 thread
             {
                 foreach (var item in source)
                 {
                     action(item);
                 }
-                return;
+            }
+            else
+            {
+                Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = (int)threads }, action);
             }
 
-            Parallel.ForEach(source, new ParallelOptions { MaxDegreeOfParallelism = (int)threads }, action);
+            if (time)
+            {
+                Logger.Log($"ParallelForEach ran in {sw.Format()}");
+            }
         }
 
         /// <summary> Shortcut for Parallel.For with threads parameter </summary>

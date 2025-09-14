@@ -108,17 +108,18 @@ namespace NmkdUtils
 
         public static List<string> GetEnumNamesSnek(Type enumType) => Enum.GetNames(enumType).Select(PascalToSnakeCase).ToList();
 
-        public static string PrintEnumCli(Type enumType, bool withNumbers = true, bool linebreaks = false)
+        public static string PrintEnumCli(Type enumType, bool linebreaks = false, bool? numbers = null, int skip = 0)
         {
+            numbers ??= linebreaks; // If not specified, use numbers if linebreaks are used
             string delimiter = linebreaks ? "\n" : " ";
             var list = GetEnumNamesSnek(enumType);
-            if (withNumbers)
+            if (numbers == true)
                 list = list.Select((s, i) => $"{i}: {s}").ToList();
-            return list.Join(delimiter);
+            return list.Skip(skip).Join(delimiter);
         }
 
-        public static string PrintEnumCli<T>(bool withNumbers = true, bool linebreaks = false) where T : Enum
-            => PrintEnumCli(typeof(T), withNumbers, linebreaks);
+        public static string PrintEnumCli<T>(bool linebreaks = false, bool? numbers = null, int skip = 0) where T : Enum
+            => PrintEnumCli(typeof(T), linebreaks, numbers, skip);
 
         /// <summary>
         /// Parses a string representing a bitrate (e.g. "24m"), case-insensitive, and returns it as kbps
@@ -200,16 +201,15 @@ namespace NmkdUtils
         /// Breaks long lines based on <paramref name="targetLength"/>. The hard limit is <paramref name="targetLength"/> * <paramref name="tolerance"/>. <br/>
         /// <paramref name="windowFraction"/> controls how "wide" the prioritized split zone around the exact middle is (e.g. 0.25 = 50% of the total length).
         /// </summary>
-        public static string[] SplitLongLines(string[] lines, int targetLength = 45, float tolerance = 1.25f, double windowFraction = 0.2, List<string>? exclusionWildcards = null)
+        public static List<string> SplitLongLines(IEnumerable<string> lines, int targetLength = 45, float tolerance = 1.25f, double windowFraction = 0.2, List<string>? exclusionWildcards = null)
         {
             if (lines == null)
-                return lines;
+                return [];
 
             if (windowFraction <= 0 || windowFraction >= 0.5)
                 throw new ArgumentOutOfRangeException(nameof(windowFraction), "windowFraction must be > 0 and < 0.5");
 
             exclusionWildcards ??= [];
-
             var result = new List<string>();
             foreach (var line in lines)
             {
@@ -219,7 +219,7 @@ namespace NmkdUtils
                     continue;
                 }
 
-                var remaining = line.Replace("...", "…"); // Replace ellipsis with a single character for splitting
+                var remaining = line.Replace("...", "…").Replace("--", "—"); // Single char for ellipsis and em dash
                 while (remaining.Length > targetLength)
                 {
                     int splitPos = FindSplitPosition(remaining, targetLength, windowFraction);
@@ -233,7 +233,7 @@ namespace NmkdUtils
                     result.Add(remaining);
             }
 
-            return result.Select(r => r.Replace("…", "...")).ToArray(); // Undo ellipsis replacement and return the result
+            return result.Select(r => r.Replace("…", "...").Replace("—", "--")).ToList(); // Undo char replacements and return the result
 
             int FindSplitPosition(string text, int threshold, double wf)
             {
@@ -241,17 +241,15 @@ namespace NmkdUtils
                 int mid = text.Length / 2;
                 int lower = Math.Max(0, (int)(mid - wf * text.Length));
                 int upper = Math.Min(limit, (int)(mid + wf * text.Length));
-                char[] punctuation = { '.', ',', ';', '!', '?', ':', '"', '…' };
+                char[] punctuation = { '.', ',', ';', '!', '?', ':', '"', '…', '—' };
 
                 // 1. punctuation in [lower..upper], not followed by letter/digit
-                var punctPositions = Enumerable.Range(lower, upper - lower)
-                    .Where(i =>
+                var punctPositions = Enumerable.Range(lower, (upper - lower).Clamp(1)).Where(i =>
                     {
                         if (!punctuation.Contains(text[i])) return false;
                         if (i + 1 < text.Length && char.IsLetterOrDigit(text[i + 1])) return false;
                         return true;
-                    })
-                    .ToList();
+                    }).ToList();
                 if (punctPositions.Any())
                 {
                     int best = punctPositions.OrderBy(i => Math.Abs(i - mid)).First();
@@ -430,80 +428,53 @@ namespace NmkdUtils
                 return (core, punct);
             }
         }
-        /// <summary> <inheritdoc cref="LimitWordReps(IEnumerable{string}, int)"/> </summary>
+        /// <inheritdoc cref="LimitWordReps(IEnumerable{string}, int)"/>
         public static string LimitWordReps(string s, int maxRepetitions = 4) => LimitWordReps([s], maxRepetitions)[0];
 
-        /// <summary>
-        /// Trims any run of consecutive identical characters in <paramref name="s"/> so that no character repeats more than <paramref name="threshold"/> times in a row.
-        /// </summary>
-        public static string LimitCharReps(string s, int threshold)
+        /// <summary> Limit how often a character can be repeated in a string to <paramref name="threshold"/>. <br/> Use <paramref name="chars"/> to only apply this to specific chars. </summary>
+        public static string LimitCharReps(string s, int threshold, IEnumerable<char>? chars = null, bool log = false)
         {
             if (s.IsEmpty())
                 return s;
 
             threshold = threshold.Clamp(1, 1000); // Ensure threshold is within a reasonable range
+            HashSet<char>? charsToLimit = chars != null ? new HashSet<char>(chars) : null;
             var sb = new StringBuilder(s.Length);
-            char previousChar = '\0';
+            char lastChar = '\0';
             int runCount = 0;
 
             foreach (char c in s)
             {
-                if (c == previousChar)
+                // Determine if this character should be limited
+                bool shouldLimit = charsToLimit == null || charsToLimit.Contains(c);
+
+                if (c == lastChar)
                 {
                     runCount++;
+
+                    // Only append if under threshold or not a character we're limiting
+                    if (!shouldLimit || runCount <= threshold)
+                    {
+                        sb.Append(c);
+                    }
                 }
                 else
                 {
-                    previousChar = c;
+                    // It's a new character, so reset the run count and append
+                    lastChar = c;
                     runCount = 1;
-                }
-
-                if (runCount <= threshold)
-                {
                     sb.Append(c);
                 }
             }
 
-            return sb.ToString();
-        }
+            string result = sb.ToString();
 
-        /// <summary>
-        /// Removes repetitions of any char in <paramref name="charsToCollapse"/>, collapsing consecutive runs down to a single char.
-        /// </summary>
-        public static string TrimCharReps(string s, IEnumerable<char> charsToCollapse)
-        {
-            if (s.IsEmpty() || charsToCollapse == null || charsToCollapse.None())
-                return s;
-
-            var toCollapse = new HashSet<char>(charsToCollapse); // For O(1) lookup
-            var sb = new StringBuilder(s.Length);
-            char previousChar = '\0';
-
-            foreach (char c in s)
+            if (log && result != s)
             {
-                if (c == previousChar && toCollapse.Contains(c)) // If this char is one we're collapsing AND it's the same as the last one we kept, skip it; otherwise append.
-                    continue;
-
-                sb.Append(c);
-                previousChar = c;
+                Logger.Log($"Trimmed char repetitions: '{s.SquashLines(" ⏎ ")}' -> '{result.SquashLines(" ⏎ ")}' (threshold: {threshold}x)");
             }
 
-            return sb.ToString();
-        }
-
-        public static string SentenceDedupe(string s, int minLength = 10)
-        {
-            var match = Regexes.DuplicateText.Match(s);
-
-            if (!match.Success)
-                return s;
-
-            var dedup = match.Groups[1].Value.Trim();
-
-            if (dedup.Length >= minLength)
-                return dedup;
-
-            return s; // If the deduped sentence is shorter than minLength, return the original string
+            return result;
         }
 
         /// <summary> Checks if a string is a valid Base64-encoded string. </summary>
@@ -549,7 +520,7 @@ namespace NmkdUtils
             return strings.Where(s => s.FuzzyMatches(findStr, threshold)).OrderByDescending(s => s.GetFuzzyMatchScore(findStr)).FirstOrDefault(); // Return the first (best) match
         }
 
-        /// <summary> <inheritdoc cref="ReplaceLinesFuzzy(string, string, out List{ValueTuple{string, int}}, string, int, bool, bool)"/> </summary>
+        /// <inheritdoc cref="ReplaceLinesFuzzy(string, string, out List{ValueTuple{string, int}}, string, int, bool, bool, bool, bool)"/>
         public static string ReplaceLinesFuzzy(string s, string find, string replace = "", int threshold = 90, bool mustMatchWordCount = true, bool log = false)
             => ReplaceLinesFuzzy(s, find, out _, replace, threshold, mustMatchWordCount, log);
 
@@ -564,9 +535,9 @@ namespace NmkdUtils
             if (s.IsEmpty() || find.IsEmpty())
                 return s;
 
-            var lines = s.SplitIntoLines();
+            var lines = s.GetLines();
 
-            for (int i = 0; i < lines.Length; i++)
+            for (int i = 0; i < lines.Count; i++)
             {
                 if (lines[i] == find || lines[i].IsEmpty())
                     continue;
@@ -726,47 +697,60 @@ namespace NmkdUtils
             return string.Concat(tokens).Trim();
         }
 
-        public static string SplitSentences(string s, bool allowRecurse = false, bool onlyIfOneLine = true)
+        public static string SplitSentences(string s, bool allowRecurse = false, bool onlyIfOneLine = true, bool splitOnDoubleHyphen = false)
         {
             if (s.IsEmpty())
                 return s;
 
-            if (onlyIfOneLine && s.SplitIntoLines().Length > 1)
+            if (onlyIfOneLine && s.GetLines().Count > 1)
                 return s;
 
-            s = s.Replace("...", "…"); // Replace ellipsis with a single character for splitting
+            string original = s; // Keep the original string for logging
+            s = s.RegexReplace(Regexes.EllipsisBeforeSpaceAndUpperChar, "…");  // Replace ellipsis with a single char for splitting
+            s = splitOnDoubleHyphen ? s.Replace("-- ", "— ") : s; // Same for em dash if allowed
+            s = s.Replace("...", ",,,"); // Temporary replacement for remaining ellipses to avoid splitting on their periods
             s = s.RegexReplace(Regexes.NonSentenceEndingPeriod1, "|"); // Replace non-sentence-ending periods with a placeholder
             s = s.RegexReplace(Regexes.NonSentenceEndingPeriod2, "|");
             s = s.RegexReplace(Regexes.NonSentenceEndingPeriod3, "|");
             s = s.RegexReplace(Regexes.NonSentenceEndingPeriodNumbers, "|");
             s = DoSplitSentences(s, allowRecurse);
-            s = s.Replace("…", "...").Trim(); // Undo ellipsis replacement
+            s = s.Replace("…", "...").Replace("— ", "-- ").Replace("—\n", "--\n").Replace(",,,", "...").Trim(); // Undo char replacement
             s = s.Replace("|", ".");
             s = s.RegexReplace("\\. \"(?=\\r?$)", ".\"");
+
+            if(s != original)
+                Logger.Log($"Split sentences: '{original.SquashLines(" ⏎ ")}' -> '{s.SquashLines(" ⏎ ")}'", print: false);
+
             return s;
         }
 
         private static string DoSplitSentences(string s, bool allowRecurse = false)
         {
             // Find index of the first sentence-ending punctuation
-            int index = s.IndexOfAny(['.', '!', '?', '…']);
+            int index = s.IndexOfAny(['.', '!', '?', '…', '—']);
 
-            if (index == -1 || index < 3)
-            {
-                // No sentence-ending punctuation found, return the original string
+            if (index == -1 || index < 3) // No sentence-ending punctuation found, return the original string
                 return s;
-            }
 
             // Split the string at the first sentence-ending punctuation
             string firstSentence = s.Substring(0, index + 1).Trim();
             string remainingText = s.Substring(index + 1).Trim();
             // If there is remaining text, recursively split it
             if (remainingText.IsEmpty() || remainingText.IsNotEmpty() && !allowRecurse)
-                return (firstSentence + (remainingText.Length >= 4 ? "\n" : " ") + remainingText).Replace("…", "...").Trim();
+                return (firstSentence + (remainingText.Length >= 3 ? "\n" : " ") + remainingText).Trim();
 
-            return (firstSentence + "\n" + SplitSentences(remainingText)).Replace("…", "...").Trim();
+            return (firstSentence + "\n" + SplitSentences(remainingText)).Trim();
         }
 
         public static string GetClipboardText() => TextCopy.ClipboardService.GetText();
+
+        public static string AppendIf(ref string s, string append, bool condition = true)
+        {
+            if (condition && !s.EndsWith(append))
+            {
+                s += append;
+            }
+            return s;
+        }
     }
 }

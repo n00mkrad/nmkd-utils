@@ -89,10 +89,12 @@
         }
 
         /// <summary> Check if <paramref name="value"/> is within [<paramref name="min"/>, <paramref name="max"/>]. </summary>
-        public static bool IsInRange(this int value, int min, int max = int.MaxValue)
-        {
-            return value >= min && value <= max;
-        }
+        public static bool IsWithin(this int value, int min, int max = int.MaxValue)
+            => value >= min && value <= max;
+
+        /// <summary> Check if <paramref name="value"/> is within [<paramref name="min"/>, <paramref name="max"/>]. </summary>
+        public static bool IsWithin(this float value, float min, float max = float.MaxValue)
+            => value >= min && value <= max;
 
         /// <summary> <inheritdoc cref="MathUtils.GetPercent{T}(IEnumerable{T}, Func{T, bool})"/> </summary>
         public static float GetPercent<T>(this IEnumerable<T> collection, Func<T, bool> predicate) => MathUtils.GetPercent(collection, predicate);

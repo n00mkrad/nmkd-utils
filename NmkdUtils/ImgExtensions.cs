@@ -8,11 +8,11 @@ namespace NmkdUtils;
 
 public static class ImgExtensions
 {
-    /// <inheritdoc cref="ImgUtils.Resize(object, float, float?, ResizeMode, Level)"/>
+    /// <inheritdoc cref="ImgUtils.Resize(object, float, float?, ResizeMode, IResampler?, Level)"/>
     public static Image Resize(this Image i, float width, float? height = null, ResizeMode mode = ResizeMode.Stretch, IResampler? sampler = null, Level logLvl = Level.Verbose)
         => ImgUtils.Resize(i, width, height, mode, sampler, logLvl);
 
-    /// <inheritdoc cref="ImgUtils.Crop(object, int?, int?, int?, int?, Level))"/>
+    /// <inheritdoc cref="ImgUtils.Crop(object, int?, int?, int?, int?, Level)"/>
     public static Image Crop(this Image i, int? width = null, int? height = null, int? x = null, int? y = null, Level logLvl = Level.Verbose)
         => ImgUtils.Crop(i, width, height, x, y, logLvl);
 
@@ -47,6 +47,9 @@ public static class ImgExtensions
             img?.Dispose();
         }
     }
+
+    /// <summary> Returns the total amount of pixels (WxH) </summary>
+    public static int CountPixels(this Image image) => image.Width * image.Height;
 
     /// <summary> Run an action with every pixel, optionally with subsampling (<paramref name="scale"/>). </summary>
     public static void ProcessPixels(this Image image, float scale, Action<Rgba32, int, int> pixelAction)

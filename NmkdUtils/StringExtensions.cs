@@ -7,23 +7,21 @@ namespace NmkdUtils
     public static partial class StringExtensions
     {
         /// <summary> Shortcut for !string.IsNullOrWhiteSpace </summary>
-        public static bool IsNotEmpty(this string? s)
-        {
-            return !string.IsNullOrWhiteSpace(s);
-        }
+        public static bool IsNotEmpty(this string? s, bool whitespaceCountsAsEmpty = true)
+            => !s.IsEmpty(whitespaceCountsAsEmpty);
 
         /// <summary> Shortcut for string.IsNullOrWhiteSpace </summary>
         public static bool IsEmpty(this string? s, bool whitespaceCountsAsEmpty = true)
-        {
-            if (whitespaceCountsAsEmpty)
-                return string.IsNullOrWhiteSpace(s);
-
-            return string.IsNullOrEmpty(s);
-        }
+            => whitespaceCountsAsEmpty ? string.IsNullOrWhiteSpace(s) : string.IsNullOrEmpty(s);
 
         public static string ReplaceEmpty(this string s, string replaceWith = "N/A")
         {
             return s.IsEmpty() ? replaceWith : s;
+        }
+
+        public static string ToLowStr(this object o, bool invariant = false)
+        {
+            return invariant ? $"{o}".ToLowerInvariant() : $"{o}".ToLower();
         }
 
         /// <summary> Wrap with quotes, optionally convert backslashes to slashes or add a space to front/end </summary>
@@ -60,14 +58,15 @@ namespace NmkdUtils
             return s;
         }
 
+        [Obsolete("Use List-based GetLines.", error: false)]
         public static string[] SplitIntoLines(this string str, bool ignoreEmpty = false)
         {
-            string[] split = Regexes.LineBreaks.Split(str);
-            return ignoreEmpty ? split.Where(line => line.IsNotEmpty()).ToArray() : split;
+            return str.GetLines(ignoreEmpty).ToArray();
         }
+        [Obsolete("Use List-based GetLines.", error: false)]
         public static string[] SplitIntoLinesOut(this string str, out string[] lines, bool ignoreEmpty = false)
         {
-            lines = SplitIntoLines(str, ignoreEmpty);
+            lines = str.SplitIntoLines(ignoreEmpty);
             return lines;
         }
 
@@ -347,15 +346,15 @@ namespace NmkdUtils
         }
 
         /// <summary> Replaces a string if it starts with the <paramref name="find"/> string. Ignores later occurences unless <paramref name="firstOccurenceOnly"/> is false. </summary>
-        public static string ReplaceAtStart(this string s, string find, string replace = "", bool firstOccurenceOnly = true, bool caseIns = false)
+        public static string ReplaceAtStart(this string s, string find, string replace = "", bool firstOccurenceOnly = true, bool ci = false)
         {
-            if (s.IsEmpty() || !s.StartsWith(find, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            if (s.IsEmpty() || !s.StartsWith(find, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 return s;
 
             if (firstOccurenceOnly)
-                return s.ReplaceFirst(find, replace, caseIns);
+                return s.ReplaceFirst(find, replace, ci);
             else
-                return s.Replace(find, replace, caseIns ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                return s.Replace(find, replace, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
 
         /// <summary> Replaces line breaks (one or more) with <paramref name="delimiter"/> </summary>
@@ -399,7 +398,7 @@ namespace NmkdUtils
             if (s.IsEmpty())
                 return s;
 
-            return s.SplitIntoLines().Where(l => l.IsNotEmpty()).Join("\n");
+            return s.GetLines().Where(l => l.IsNotEmpty()).Join("\n");
         }
 
         /// <summary> Shortcut for ToLowerInvariant </summary>
@@ -584,6 +583,7 @@ namespace NmkdUtils
             TextCopy.ClipboardService.SetText(s);
         }
 
+        /// <summary> Checks if a string is equal to any of the provided <paramref name="strings"/>, optionally case-insensitive. </summary>
         public static bool IsOneOf(this string s, bool caseSensitive, params object[] strings)
         {
             StringComparison strComp = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
@@ -597,6 +597,7 @@ namespace NmkdUtils
             return strings.Any(v => s.Equals(v.ToString(), strComp));
         }
 
+        /// <inheritdoc cref="IsOneOf(string, bool, object[])"/>
         public static bool IsOneOf(this string s, params object[] strings) => IsOneOf(s, caseSensitive: true, strings);
 
         public static string DecodeUnicodeEscapes(string input)

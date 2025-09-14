@@ -10,6 +10,7 @@ namespace NmkdUtils.Media
     public class MediaObject
     {
         public enum DemuxMode { All, StreamsWithoutKbpsMetadata, None }
+        public string RawJson { get; set; } = "";
         public FileInfo? File { get; set; }
         public List<Stream> Streams { get; set; } = [];
         public Format Format { get; set; } = new Format();
@@ -65,12 +66,12 @@ namespace NmkdUtils.Media
 
         public void Load(bool loadFrameData, DemuxMode demuxMode, bool demuxPrints)
         {
-            string json = FfmpegUtils.GetFfprobeOutput(File.FullName);
+            RawJson = FfmpegUtils.GetFfprobeOutput(File.FullName);
             var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
-            var parsedData = JsonConvert.DeserializeObject<MediaObject>(json, settings);
+            var parsedData = JsonConvert.DeserializeObject<MediaObject>(RawJson, settings);
             Streams = parsedData.Streams.Select(CreateStream).ToList();
             Format = parsedData.Format;
-            Format.ParseAdditionalValues(JObject.Parse(json));
+            Format.ParseAdditionalValues(JObject.Parse(RawJson));
 
             if (loadFrameData && VidStreams.Any())
             {
@@ -125,11 +126,11 @@ namespace NmkdUtils.Media
             }
         }
 
-        public void Print(bool format = true, bool colorizeStreams = true, List<string>? filterWildcards = null)
+        public void Print(bool format = true, bool colorizeStreams = true, List<string>? filterWildcards = null, bool addEmptyLine = false)
         {
             filterWildcards ??= [];
-            Logger.Log(File.Name);
-            Logger.Log(new Logger.Entry(format ? $" {Format}" : Format) { CustomColor = format ? ConsoleColor.White : null });
+            List<Logger.Entry> entries = [];
+            bool anyFilteredResults = false;
 
             foreach (var s in Streams)
             {
@@ -148,8 +149,17 @@ namespace NmkdUtils.Media
                 if (filterWildcards.Any() && !entry.Message.MatchesAllWildcards(filterWildcards))
                     continue;
 
-                Logger.Log(entry); // Pass this MediaObject to the Print method for relative stream indexes, padding, etc
+                anyFilteredResults = true;
+                entries.Add(entry); // Pass this MediaObject to the Print method for relative stream indexes, padding, etc
             }
+
+            if (filterWildcards.Any() && !anyFilteredResults)
+                return;
+
+            entries.Insert(0, new Logger.Entry(File.Name));
+            entries.Insert(1, new Logger.Entry(format ? $" {Format}" : Format) { CustomColor = format ? ConsoleColor.White : null });
+            entries.ForEach(e => Logger.Log(e));
+            Logger.Log("", condition: () => addEmptyLine); // Add an empty line after each file
         }
     }
 }

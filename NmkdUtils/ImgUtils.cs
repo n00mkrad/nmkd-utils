@@ -8,9 +8,10 @@ using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
+using System;
 using System.Collections.Concurrent;
-using static NmkdUtils.Enums;
 using static NmkdUtils.CodeUtils;
+using static NmkdUtils.Enums;
 
 
 namespace NmkdUtils
@@ -84,8 +85,12 @@ namespace NmkdUtils
 
                     if (StringUtils.IsWebUrl(str))
                     {
-                        using Stream stream = new HttpClient().DownloadFileStream(str);
-                        return Image.Load(stream);
+                        using var http = new HttpClient(); // ideally reuse this
+                        using var response = http.GetAsync(str, HttpCompletionOption.ResponseHeadersRead).Result;
+                        response.EnsureSuccessStatusCode();
+                        using var stream = response.Content.ReadAsStreamAsync().Result; // readable
+                        var image = Image.LoadAsync(stream).Result;
+                        return image;
                     }
                 }
             }
@@ -118,7 +123,7 @@ namespace NmkdUtils
                 savePath = IoUtils.GetAvailablePath(path);
             }
 
-            if (format == Format.Jpg)
+            if (format is Format.Jpg or Format.Jpg444)
             {
                 quality ??= 95; // Default JPEG quality if not specified
                 var encoder = new JpegEncoder { Quality = quality, ColorType = GetSubsampling(format) };
@@ -197,7 +202,7 @@ namespace NmkdUtils
                 return img;
 
             // If x/y are out of bounds, default to center
-            if (!x.Value.IsInRange(0, img.Width) || !y.Value.IsInRange(0, img.Height))
+            if (!x.Value.IsWithin(0, img.Width) || !y.Value.IsWithin(0, img.Height))
             {
                 x = (img.Width - width) / 2;
                 y = (img.Height - height) / 2;
@@ -319,6 +324,31 @@ namespace NmkdUtils
             }
 
             return image;
+        }
+
+        public static void AddImdbRatingText(Image img, float rating, int fontSize = 48)
+        {
+            Font font = SystemFonts.CreateFont("Segoe UI", fontSize, FontStyle.Bold);
+            img.Resize(500, 500, ResizeMode.Max);
+            var textOptions = new RichTextOptions(font) { Origin = new PointF(20, img.Height - 15), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom };
+            // Layer text onto shadow layer onto original image
+            using var textImg = new Image<Rgba32>(img.Width, img.Height, Color.Transparent);
+            using var textShadowImg = new Image<Rgba32>(img.Width, img.Height, Color.Transparent);
+            //img.Mutate(i => i.DrawText(textOptions, $"{rating:0.0}", rating >= 6.0 ? Color.Yellow : Color.Orange));
+            string text = $"{rating:0.0}";
+            textImg.Mutate(i => i.DrawText(textOptions, text, rating >= 6.0 ? Color.Yellow : Color.Orange));
+            textShadowImg.Mutate(i => i.DrawText(textOptions, text, Color.Black).GaussianBlur(3.5f));
+            img.Mutate(i => i.DrawImage(textShadowImg, new Point(0, 0), 1f));
+            img.Mutate(i => i.DrawImage(textImg, new Point(0, 0), 1f));
+        }
+
+        public static void AddBrightnessPlotText(Image img, string textTop, string textBot)
+        {
+            Font font = SystemFonts.CreateFont("Segoe UI", 18, FontStyle.Bold);
+            var textOptions = new RichTextOptions(font) { Origin = new PointF(img.Width / 2, 4), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top };
+            img.Mutate(i => i.DrawText(textOptions, textTop, Color.Black));
+            textOptions = new RichTextOptions(font) { Origin = new PointF(img.Width / 2, img.Height - 6), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom };
+            img.Mutate(i => i.DrawText(textOptions, textBot, Color.Black));
         }
 
         /// <summary> Create a simple text image, size is variable (based on font size). </summary>
@@ -465,7 +495,7 @@ namespace NmkdUtils
                 int count = CountNonBlackPixels(input, scale, minValue, dispose);
                 results[index] = count;
             });
-            
+
             return results.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToList(); // Convert to list, ordered by the original index (same order as inputs)
         }
 
@@ -539,6 +569,85 @@ namespace NmkdUtils
 
             images.ToList().ForEach(img => img.DisposeIf(dispose));
             return stackedImage;
+        }
+
+        public static Image<Rgba32> RenderColumnPlot(IReadOnlyDictionary<int, float> data, int height, int bin = 1, int vPad = 0, float? maxValue = null, Rgba32? cBar = null, Rgba32? cBg = null)
+        {
+            if (data == null || data.Count == 0)
+                throw new ArgumentException("Data must be non-empty.", nameof(data));
+            if (height <= vPad * 2)
+                throw new ArgumentException("Image height must exceed top+bottom padding.", nameof(height));
+            if (bin < 1) bin = 1;
+
+            cBg ??= new Rgba32(255, 255, 255, 0);
+
+            // Order by column index and take just the values.
+            var values = data.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToArray();
+
+            // Bin/average consecutive values if requested.
+            float[] binned = (bin == 1) ? values : BinAverage(values, bin);
+
+            // Determine scaling.
+            float localMax = maxValue ?? binned.Max();
+            if (localMax <= 0f)
+                return new Image<Rgba32>(binned.Length, height, cBg.Value); // No bars can be drawn meaningfully
+
+            int plotHeight = Math.Max(1, height - vPad - vPad);
+            var img = new Image<Rgba32>(binned.Length, height, cBg.Value);
+            Rgba32 bar = cBar ?? new Rgba32(0x2D, 0x6A, 0x4F); // nice dark teal
+
+            int yBottomExclusive = height - vPad;
+
+            // Fill columns bottom-up using the indexer (no extra drawing package needed).
+            for (int x = 0; x < binned.Length; x++)
+            {
+                float v = binned[x];
+                int h = (int)MathF.Round((v / localMax) * plotHeight);
+                if (h <= 0)
+                    continue;
+                int yTop = Math.Max(vPad, yBottomExclusive - h);
+                for (int y = yTop; y < yBottomExclusive; y++)
+                {
+                    img[x, y] = bar;
+                }
+            }
+
+            return img;
+        }
+
+        /// <summary> Averages values in consecutive fixed-size bins. </summary>
+        private static float[] BinAverage(IReadOnlyList<float> values, int binSize)
+        {
+            int n = values.Count;
+            int bins = (int)Math.Ceiling(n / (double)binSize);
+            var result = new float[bins];
+
+            for (int b = 0; b < bins; b++)
+            {
+                int start = b * binSize;
+                int end = Math.Min(start + binSize, n);
+                double sum = 0;
+                for (int i = start; i < end; i++) sum += values[i];
+                result[b] = (float)(sum / (end - start));
+            }
+
+            return result;
+        }
+
+        // Layers images on top of each other, centered. The first image in the list is the bottom layer.
+        public static Image LayerImages(List<Image> images, bool dispose = true)
+        {
+            if (images == null || !images.Any())
+                return null;
+            int width = images.Max(img => img.Width);
+            int height = images.Max(img => img.Height);
+            var layeredImage = new Image<Rgba32>(width, height, Color.White);
+            foreach (var img in images)
+            {
+                layeredImage.Mutate(ctx => ctx.DrawImage(img, PixelColorBlendingMode.Normal, PixelAlphaCompositionMode.SrcOver, 1f));
+            }
+            images.ToList().ForEach(img => img.DisposeIf(dispose));
+            return layeredImage;
         }
 
         /// <summary> Release ImageSharp memory and run garbage collection. </summary>

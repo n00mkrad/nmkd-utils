@@ -33,7 +33,7 @@ namespace NmkdUtils
         public static string Time(Stopwatch sw, bool forceDecimals = false, bool noDays = true) => Time(sw.Elapsed.TotalMilliseconds, forceDecimals: forceDecimals, noDays: noDays);
 
         /// <summary>
-        /// Converts a TimeSpan <paramref name="ts"/> into a string. <paramref name="forceDecimals"/> forces decimals for seconds (e.g. 1.00 instead of 1). <br/>
+        /// Converts a time (in milliseconds) into a string. <paramref name="forceDecimals"/> forces decimals for seconds (e.g. 1.00 instead of 1). <br/>
         /// <paramref name="noDays"/> will limit the output to hours/minutes/seconds in case it's more than 24 hours.
         /// </summary>
         public static string Time(double milliseconds, bool forceDecimals = false, bool noDays = true)
@@ -122,10 +122,8 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary>
-        /// Beautifies the output of ffmpeg's progress stats (Frame, FPS, Bitrate, Size, Time, Speed).
-        /// </summary>
-        public static string BeautifyFfmpegStats(string s)
+        /// <summary> Beautifies the output of ffmpeg's progress stats (Frame, FPS, Bitrate, Size, Time, Speed). If <paramref name="keepOtherText"/> is false, every output that isn't stats will be stripped.  </summary>
+        public static string BeautifyFfmpegStats(string s, bool keepOtherText = false)
         {
             if (s.IsEmpty())
                 return s;
@@ -140,7 +138,7 @@ namespace NmkdUtils
             string speed = s.Contains(" speed=") ? s.Split(" speed=").Last().Split(' ').First().Split('x').First().Replace("N/A", "") : "";
 
             if (speed.IsEmpty() && (frame.IsEmpty() || size.IsEmpty()))
-                return orig;
+                return keepOtherText ? orig : "";
 
             List<string> values = [];
 
@@ -159,7 +157,7 @@ namespace NmkdUtils
             }
 
             if (size.IsNotEmpty())
-                values.Add($"Output Size: {(size.GetFloat() / 1024f).ToString("0.##")} MiB");
+                values.Add($"Output Size: {(size.GetFloat() / 1024f).ToString("0.00#")} MiB");
 
             if (time.IsNotEmpty() && !time.StartsWith("-"))
                 values.Add($"Time: {time}");
@@ -196,9 +194,9 @@ namespace NmkdUtils
             if (trace.IsEmpty())
                 return "";
 
-            var split = trace.SplitIntoLines();
+            var split = trace.GetLines();
 
-            for (int i = 0; i < split.Length; i++)
+            for (int i = 0; i < split.Count; i++)
             {
                 split[i] = Regex.Replace(split[i], @"`\d", "");
 
@@ -252,7 +250,7 @@ namespace NmkdUtils
         public static string LastProjectStackItem(string trace)
         {
             string appName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
-            var split = trace.SplitIntoLines();
+            var split = trace.GetLines();
             var line = split.Where(s => s.Trim().StartsWith($"   at {appName}.")).ToList();
 
             if (line.Count < 1)
@@ -281,6 +279,26 @@ namespace NmkdUtils
             {
                 return $"{locStr}[{ex.GetType()}] [{unwrapped.Count} Inner] {noteStr}{ex.Message.Trunc(320)}{traceStr}";
             }
+        }
+
+        /// <summary> Formats two numbers and the resulting percentage, e.g. "5/20 (25%)" </summary>
+        public static string NumsPercent(int part, int total, int zPad = 0, string prcFormat = "0.#")
+        {
+            if (total == 0)
+                return $"{part}/{total}";
+            float percent = (part / (float)total) * 100f;
+            return $"{part.ZPad(zPad)}/{total.ZPad(zPad)} ({percent.ToString(prcFormat)}%)";
+        }
+
+        /// <summary> Count amount of items of any IEnumerable, get current item using IndexOf and return a string like "3/10". </summary>
+        public static string IterationProgress<T>(IEnumerable<T> items, T currentItem, bool brackets = false)
+        {
+            // Check if IENumerable is ICollection to avoid multiple enumeration, then get count
+            int total = items is ICollection<T> coll ? coll.Count : items.Count();
+            // Check if IEnumerable is IList to avoid ToList(), then get index of current item
+            int currentIndex = items is IList<T> list ? list.IndexOf(currentItem) : items.ToList().IndexOf(currentItem);
+            string s = $"{currentIndex + 1}/{total}";
+            return brackets ? $"[{s}]" : s;
         }
     }
 }

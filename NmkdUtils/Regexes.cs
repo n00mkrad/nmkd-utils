@@ -10,14 +10,18 @@ namespace NmkdUtils
         /// <summary> Space after an ellipsis at the start of a line </summary>
         public static readonly Regex SpaceAfterEllipsisLineStart = new(@"(?m)(?<=^\.\.\.)\s", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+        /// <summary> Space before punctuation that is not valid (e.g. Hello !) </summary>
+        public static readonly Regex PunctuationWithInvalidSpace = new(@" (?=[,.;:?!])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         /// <summary> Dot followed by an uppercase letter and then a lowercase letter </summary>
         public static readonly Regex PunctuationFollowedByUpperLetter = new(@"((?<!(?:\.\.))\.|[!?])(?=[A-Z][a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Comma followed by an lowercase letter </summary>
         public static readonly Regex CommaBeforeLowerLetter = new(@",(?=[a-z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        public static readonly Regex SingleQuoteBeforeUpperLetter = new(@"'(?=[A-Z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-        public static readonly Regex SingleQuoteBeforeUpperLetterAfterSpace = new(@"(?<=\s)'(?=[A-Z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        // public static readonly Regex SingleQuoteBeforeUpperLetter = new(@"'(?=[A-Z])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Single quote preceded by anything that's not A-Z (case-insensitive) </summary>
+        public static readonly Regex SingleQuotAfterNonAz = new(@"(?<![A-Za-z])'", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Any trailing lowercase "s" </summary>
         public static readonly Regex TrailingS = new(@"s\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -42,8 +46,18 @@ namespace NmkdUtils
         /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
         public static readonly Regex TextInParentheses = new(@"\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Speaker name in SDH subtitles. Handles edge cases with lowercase letters like "McGREGOR", "DiCAPRIO" or apostrophes like O'Connor. Also matches if there's "-" or "- " before the name. </summary>
+        /// <summary> Speaker name in SDH subtitles. Handles edge cases with lowercase letters like "McGREGOR", "DiCAPRIO" or apostrophes like O'CONNOR. Also matches if there's "-" or "- " before the name. </summary>
         public static readonly Regex SdhSpeakerName = new(@"(?:^|(?<=[\p{P}]\s))(?:-\s?)?(?:(?:Mac)|[A-Z](?:'[A-Z]|[A-Za-z]))[A-Z0-9' .-]*:\s?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Speaker name in SDH subtitles. Handles edge cases like "DiCAPRIO" or O'CONNOR. Also matches if there's a hypen before the name or if there's multiple names. </summary>
+        public static readonly Regex SdhSpeakerNames = new(@"(?:^|(?<=[\p{P}]\s))(?:-\s?)?(?:(?:Mac|[A-Z](?:'[A-Z]|[A-Za-z]))[A-Z0-9' .-]*(?:(?i: and )(?:Mac|[A-Z](?:'[A-Z]|[A-Za-z]))[A-Z0-9' .-]*)*):\s?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary> Short runs of ALL-CAPS "action/effect" phrases, not just one word and not overly long stretches. Net effect: 2 to 6 ALL-CAPS tokens (each token allows one optional hyphen. </summary>
+        public static readonly Regex UnmarkedSdhMultiCaps = new Regex(@"\b(?:[A-Z]{2,}(?:-[A-Z]{2,})?)(?:\s+(?:[A-Z]{2,}(?:-[A-Z]{2,})?)){1,5}\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary> ALL-CAPS gerund-like word of at least 7 letters total (e.g., "RINGING, "SHOUTING") </summary>
+        public static readonly Regex UnmarkedSdhSingleGerund = new Regex(@"\b[A-Z]{4,}ING\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        public static readonly Regex TwoLineBreaks = new (@"\r?\n\r?\n", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Single hyphen at the start of a line </summary>
         public static readonly Regex HyphensAtLineStart = new(@"^-+(?!-)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -131,6 +145,8 @@ namespace NmkdUtils
         public static readonly Regex NonSentenceEndingPeriodNumbers = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         /// <summary> Tokenize SRT subtitles: HTML style tags, curly brace tags, plain text </summary>
         public static readonly Regex SrtTokenize = new(@"(<[^>]+>)|(\{[^}]+\})|([^<\{\}]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        /// <summary> Ellipsis before a space and an uppercase letter, e.g. "... Word" </summary>
+        public static readonly Regex EllipsisBeforeSpaceAndUpperChar = new(@"\.{3}(?= \p{Lu})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     }
 }

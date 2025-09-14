@@ -40,13 +40,33 @@ namespace NmkdUtils.Extensions
             public List<string> ValidFiles => GetValidFiles();
             private List<string> _validFiles = [];
 
-            public string GetLongestCommonPath(bool includeFilename = false, bool caseInsensitive = true)
+            public string GetLongestCommonPath(bool includeFilename = false, bool ci = true)
             {
                 // If includeFilename is false, we remove the filename from the paths
                 var paths = ValidFiles.Select(p => includeFilename ? p : Path.GetDirectoryName(p)).Where(p => p.IsNotEmpty()).ToList();
-                string pfx = StringUtils.FindLongestCommonPrefix(paths, ci: caseInsensitive);
-                pfx = !includeFilename && pfx.EndsWith('\\') ? pfx : pfx + '\\'; // Always include trailing backslash
-                return pfx;
+
+                if (!paths.Any())
+                    return "";
+
+                if (paths.Count == 1)
+                    return paths.First();
+
+                var parts = paths.Select(p => p!.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)).ToList();
+                var shortest = parts.OrderBy(p => p.Length).First();
+                var common = new List<string>();
+
+                for (int i = 0; i < shortest.Length; i++)
+                {
+                    string currentComponent = shortest[i];
+                    if (!parts.All(p => p[i].Equals(currentComponent, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
+                        break;
+                    common.Add(currentComponent);
+                }
+
+                if(common.None())
+                    return "";
+
+                return common.Join("\\") + (includeFilename ? "" : "\\");
             }
 
             public List<string> GetValidFiles(bool invalidateCache = false)
@@ -124,27 +144,27 @@ namespace NmkdUtils.Extensions
                 return;
             }
 
-            var lines = s.SplitIntoLines();
+            var lines = s.GetLines();
 
             Logger.Log(lines[0], toFile: toFile); // "Usage:" line
-            Logger.Log(lines[1], customColor: ConsoleColor.Green, toFile: toFile); // Basic Usage description
+            Logger.Log(lines[1], color: ConsoleColor.Green, toFile: toFile); // Basic Usage description
 
             // Merge consecutive argument lines into single strings to reduce log calls; color others (title lines, etc.) differently
-            for (int i = 2; i < lines.Length; i++)
+            for (int i = 2; i < lines.Count; i++)
             {
                 if (lines[i].Contains(" : "))
                 {
                     var line = lines[i];
-                    while (i + 1 < lines.Length && lines[i + 1].Contains(" : "))
+                    while (i + 1 < lines.Count && lines[i + 1].Contains(" : "))
                     {
                         line += Environment.NewLine + lines[i + 1];
                         i++;
                     }
-                    Logger.Log(line, customColor: ConsoleColor.White, toFile: toFile);
+                    Logger.Log(line, color: ConsoleColor.White, toFile: toFile);
                 }
                 else
                 {
-                    Logger.Log(lines[i], customColor: ConsoleColor.DarkGray, toFile: toFile);
+                    Logger.Log(lines[i], color: ConsoleColor.DarkGray, toFile: toFile);
                 }
             }
 
