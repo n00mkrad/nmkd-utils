@@ -27,6 +27,7 @@ namespace NmkdUtils
             if (n == "eac3") return "EAC3";
             if (n == "dts") return profile.IsNotEmpty() ? profile : "DTS";
             if (n == "opus") return "Opus";
+            if (n == "vorbis") return "Vorbis";
             if (n == "truehd") return "TrueHD";
             if (n == "wmav2") return "WMAV2";
             if (n == "wmapro") return "WMA Pro";
