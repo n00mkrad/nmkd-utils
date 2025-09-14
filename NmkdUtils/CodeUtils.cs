@@ -23,14 +23,14 @@ namespace NmkdUtils
         public static bool AssertWarn(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
         {
             bool a = Assert(() => failureCondition, failureAction, successAction);
-            Logger.LogConditional(msg, a, Logger.Level.Warning);
+            Logger.Log(msg, Logger.Level.Warning, condition: () => a);
             return a;
         }
         /// <summary> Assert and log an error if <paramref name="failureCondition"/> is true. </summary>
         public static bool AssertErr(bool failureCondition, string msg, Action? failureAction = null, Action? successAction = null)
         {
             bool a = Assert(() => failureCondition, failureAction, successAction);
-            Logger.LogConditional(msg, a, Logger.Level.Error);
+            Logger.Log(msg, Logger.Level.Error, condition: () => a);
             return a;
         }
         /// <summary> Inverse <see cref="Assert(Func{bool}, Action, Action)"/> for validation logic. </summary>
@@ -77,6 +77,9 @@ namespace NmkdUtils
                 return false;
             }
         }
+
+        public static void TryNoWait(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false) =>
+            Task.Run(() => Try(tryAction, catchAction, logEx, errNote, logTrace));
 
         /// <inheritdoc cref="Try(Action, Action{Exception}, bool?, string, bool)"/>
         public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false)
