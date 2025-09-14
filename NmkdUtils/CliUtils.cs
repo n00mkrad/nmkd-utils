@@ -93,17 +93,14 @@ namespace NmkdUtils
         }
 
         /// <summary> WriteLine shortcut that can alternatively call <see cref="ReplaceLastConsoleLine(string)"/> and optionally reset the color. </summary>
-        public static void Write(string text, bool replaceLine = false, bool resetColBefore = false, bool resetColAfter = false, ConsoleColor? col = null)
+        public static void Write(string text, bool replaceLine = false, bool resetColBefore = false, bool resetColAfter = false, ConsoleColor? col = null, bool newLine = true)
         {
             if (resetColBefore && col == null)
             {
                 Console.ResetColor();
             }
 
-            if (col.HasValue)
-            {
-                Console.ForegroundColor = col.Value;
-            }
+            Console.ForegroundColor = col ?? Console.ForegroundColor;
 
             if (replaceLine)
             {
@@ -111,7 +108,14 @@ namespace NmkdUtils
             }
             else
             {
-                Console.WriteLine(text);
+                if (newLine)
+                {
+                    Console.WriteLine(text);
+                }
+                else
+                {
+                    Console.Write(text);
+                }
             }
 
             if (resetColAfter)
@@ -127,7 +131,7 @@ namespace NmkdUtils
         public static void PrintConsoleColors()
         {
             Log("Console Colors:");
-            GetEnums<ConsoleColor>().ForEach(c => Log($"  This is ConsoleColor.{c}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.", customColor: c, toFile: false));
+            GetEnums<ConsoleColor>().ForEach(c => Log($"  This is ConsoleColor.{c}! - The Quick Brown Fox Jumps Over The Lazy Dog. Lorem Ipsum.", color: c, toFile: false));
             Logger.WaitForEmptyQueue();
             Console.ResetColor();
         }
