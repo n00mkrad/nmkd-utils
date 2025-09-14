@@ -20,7 +20,7 @@ namespace NmkdUtils
                 return result;
 
             Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}", condition: () => log);
-            return fallback.GetValueOrDefault((T)Enum.GetValues(typeof(T)).GetValue(0));
+            return fallback.GetValueOrDefault((T)Enum.GetValues(typeof(T)).GetValue(0)!);
         }
 
         public static T GetEnumCli<T>(this object value, T? fallback = null, bool log = false) where T : struct
@@ -37,7 +37,7 @@ namespace NmkdUtils
                 return (T)Enum.ToObject(typeof(T), value);
 
             Logger.LogWrn($"Unable to parse '{value}' to enum type '{typeof(T).Name}'.{(fallback.HasValue ? $" Defaulting to {fallback}." : "")}", condition: () => log);
-            return fallback.GetValueOrDefault((T)Enum.GetValues(typeof(T)).GetValue(0));
+            return fallback.GetValueOrDefault((T)Enum.GetValues(typeof(T)).GetValue(0)!);
         }
 
         public static bool TryParseToJObject (this string json, out JObject jo, bool printErr = true, bool printTextWithErr = false)

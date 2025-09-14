@@ -11,14 +11,14 @@ namespace NmkdUtils.Media
 {
     public class Stream
     {
-        public int Index { get; set; }
+        public int Index { get; set; } = -1;
         public CodecType Type { get; set; }
-        public string Codec { get; set; }
-        public string CodecLong { get; set; }
-        public Dictionary<string, string> Values { get; set; } = new();
-        public Dictionary<string, int> Disposition { get; set; }
-        public Dictionary<string, string> Tags { get; set; }
-        public List<Dictionary<string, string>> SideData { get; set; }
+        public string Codec { get; set; } = "";
+        public string CodecLong { get; set; } = "";
+        public Dictionary<string, string> Values { get; set; } = [];
+        public Dictionary<string, int> Disposition { get; set; } = [];
+        public Dictionary<string, string> Tags { get; set; } = [];
+        public List<Dictionary<string, string>> SideData { get; set; } = [];
         [JsonIgnore] public TimeSpan Duration => Values.Get("duration", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : FfmpegUtils.GetTimespanFromFfprobe(Tags);
         [JsonIgnore] public TimeSpan StartTime => Values.Get("start_time", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : new TimeSpan();
         [JsonIgnore] public int KbpsDemuxed { get; set; } = 0;
@@ -31,7 +31,7 @@ namespace NmkdUtils.Media
         [JsonIgnore] public string CodecFriendly => Aliases.GetFriendlyCodecName(Codec);
 
         [JsonExtensionData]
-        private IDictionary<string, JToken> _values;
+        private IDictionary<string, JToken>? _values = default!;
 
         public Stream() { }
 
@@ -93,7 +93,7 @@ namespace NmkdUtils.Media
             {
                 if (kbps <= 0 || duration == null || duration?.TotalSeconds <= 0)
                     return "";
-                string s = $"{FormatUtils.FileSize(((double)(kbps / 8 * duration?.TotalSeconds)).RoundToLong() * 1024)}";
+                string s = $"{FormatUtils.FileSize(((double)(kbps / 8 * (duration?.TotalSeconds ?? 0d))).RoundToLong() * 1024)}";
                 return parentheses ? $"({s})" : s;
             }
 
@@ -238,12 +238,12 @@ namespace NmkdUtils.Media
 
     public class AudioStream : Stream
     {
-        public string Profile { get; private set; }
-        public string SampleFmt { get; private set; }
-        public int SampleRate { get; private set; }
-        public int Channels { get; private set; }
+        public string Profile { get; private set; } = "";
+        public string SampleFmt { get; private set; } = "";
+        public int SampleRate { get; private set; } = 0;
+        public int Channels { get; private set; } = 0;
         public string ChannelLayout { get; private set; } = "";
-        public bool Atmos { get; private set; }
+        public bool Atmos { get; private set; } = false;
 
         public AudioStream(Stream s)
         {

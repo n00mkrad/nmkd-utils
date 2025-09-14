@@ -20,11 +20,11 @@ namespace NmkdUtils
 
         public FindReplace() { }
 
-        public FindReplace(string find, string replace, bool caseSensitive = false, bool useRegex = false, MatchMode mode = MatchMode.Anywhere)
+        public FindReplace(string find, string replace = "", bool ci = false, bool useRegex = false, MatchMode mode = MatchMode.Anywhere)
         {
             Find = find;
             Replace = replace;
-            CaseSensitive = caseSensitive;
+            CaseSensitive = ci;
             UseRegex = useRegex;
             Mode = mode;
         }

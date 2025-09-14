@@ -15,7 +15,7 @@ namespace NmkdUtils
         public static bool IsLinux => !IsWindows;
         public static readonly bool IsElevated;
 
-        public static List<Process> SessionProcesses = new();
+        public static List<Process> SessionProcesses = [];
 
         static OsUtils()
         {
@@ -75,15 +75,11 @@ namespace NmkdUtils
             public string RunTimeStr => FormatUtils.Time(RunTime);
         }
 
-        public static string Run(string command, int printOutputLines = 0, bool printExitCode = false)
-        {
-            return Run(new RunConfig(command, printOutputLines, printExitCode)).Output;
-        }
+        public static string Run(string command, int printOutputLines = 0, bool printExitCode = false, Action<string>? onOutput = null)
+            => Run(new RunConfig(command, printOutputLines, printExitCode) { OnOutput = onOutput }).Output;
 
         public static CommandResult RunCommandShell(string cmd, int printOutputLines = 0, bool printExitCode = false)
-        {
-            return Run(new RunConfig(cmd, printOutputLines, printExitCode));
-        }
+            => Run(new RunConfig(cmd, printOutputLines, printExitCode));
 
         public static CommandResult Run(RunConfig cfg)
         {
@@ -205,8 +201,8 @@ namespace NmkdUtils
 
                 if (cfg.PrintOutputLines > 0 && result.Output.IsNotEmpty())
                 {
-                    var lines = result.Output.SplitIntoLines();
-                    string p = lines.Length > cfg.PrintOutputLines ? $"...{Environment.NewLine}" : "";
+                    var lines = result.Output.GetLines();
+                    string p = lines.Count > cfg.PrintOutputLines ? $"...{Environment.NewLine}" : "";
                     logMsg += $" Process Output:{Environment.NewLine}{p}{string.Join(Environment.NewLine, lines.TakeLast(cfg.PrintOutputLines))}";
                 }
 

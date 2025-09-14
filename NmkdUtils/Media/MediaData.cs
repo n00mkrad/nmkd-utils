@@ -57,11 +57,11 @@ namespace NmkdUtils.Media
         public class FrameData
         {
             [JsonProperty("side_data_list")]
-            public JArray SideData { get; set; }
+            public JArray SideData { get; set; } = new();
             public Dictionary<string, string> Values { get; set; } = new();
 
             [JsonExtensionData]
-            private IDictionary<string, JToken> _values;
+            private IDictionary<string, JToken>? _values = default!;
 
             public FrameData() { }
 

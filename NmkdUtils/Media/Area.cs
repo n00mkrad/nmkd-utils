@@ -26,7 +26,7 @@ namespace NmkdUtils.Media
 
         public static Area FromCropdetect(string cropdetectOutput, int paddingSides = 0, int paddingTopBot = 0, int minHeight = 0)
         {
-            string crop = cropdetectOutput.SplitIntoLines().Where(l => l.Contains(" crop=") && l.Contains("Parsed_cropdetect")).Last().Split(" crop=").Last();
+            string crop = cropdetectOutput.GetLines().Where(l => l.Contains(" crop=") && l.Contains("Parsed_cropdetect")).Last().Split(" crop=").Last();
             var cropSplit = crop.Split(':').Select(c => c.GetInt()).ToArray();
             var a = new Area(cropSplit[0], cropSplit[1], cropSplit[2], cropSplit[3]);
 
