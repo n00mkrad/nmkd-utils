@@ -57,7 +57,7 @@ namespace NmkdUtils.Media
 
             if (f.Codecs.HasAny())
             {
-                streams = streams.Where(s => f.Codecs.Any(c => s.CodecFriendly.MatchesWildcard(c, orContains: true)));
+                streams = streams.Where(s => s.CodecFriendly.MatchesAnyWildcard(f.Codecs));
             }
 
             if (f.Langs.HasAny())
