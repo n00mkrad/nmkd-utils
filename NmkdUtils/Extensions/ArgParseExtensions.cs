@@ -81,7 +81,7 @@ namespace NmkdUtils.Extensions
                 validDirs.ForEach(d => Paths.AddRange(IoUtils.GetFilePaths(d, AllowRecurse, FilesWildcard))); // Add files from directories to the list of paths
                 var existMode = AllowEmptyFiles ? IoUtils.ExistMode.MustExist : IoUtils.ExistMode.NotEmpty;
                 var validFiles = Paths.Where(p => IoUtils.ValidatePath(p, IoUtils.PathType.File, existMode)).Select(Path.GetFullPath).Distinct(); // Filter out invalid files, get full paths, remove duplicates
-                IoUtils.SortFiles(validFiles, Sort);
+                validFiles = IoUtils.SortPaths(validFiles, Sort);
                 _validFiles = validFiles.ToList(); // Cache the valid files
                 return _validFiles;
             }

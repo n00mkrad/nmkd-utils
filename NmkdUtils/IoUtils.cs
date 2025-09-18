@@ -1,6 +1,6 @@
 ﻿using Microsoft.VisualBasic.FileIO;
+using NmkdUtils.Classes;
 using System.Drawing;
-using System.IO;
 using System.Text;
 using static NmkdUtils.CodeUtils;
 using SearchOption = System.IO.SearchOption;
@@ -25,49 +25,52 @@ namespace NmkdUtils
             return null;
         }
 
-        /// <summary> Sorts file paths. </summary>
-        public static IEnumerable<string> SortFiles(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
+        public static List<string> GetPathParts(string path, bool skipFirst = false, bool skipLast = false)
+        {
+            if (path.IsEmpty())
+                return [];
+            path = path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/'); // Normalize to forward slashes
+            var parts = path.Split('/').Where(s => s.IsNotEmpty()).ToList();
+            if (skipFirst && parts.Count > 0)
+                parts.RemoveAt(0);
+            if (skipLast && parts.Count > 0)
+                parts.RemoveAt(parts.Count - 1);
+            return parts;
+        }
+
+        /// <summary> Sorts file or directory paths. Sorting by size is not supported. </summary>
+        public static IEnumerable<string> SortPaths(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
         {
             if (mode == Enums.Sort.None) return paths;
             if (mode == Enums.Sort.AToZ) return paths.OrderBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase);
             if (mode == Enums.Sort.ZToA) return paths.OrderByDescending(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase);
-            if (mode == Enums.Sort.Newest) return paths.OrderByDescending(p => new FileInfo(p).LastWriteTime);
-            if (mode == Enums.Sort.Oldest) return paths.OrderBy(p => new FileInfo(p).LastWriteTime);
-            if (mode == Enums.Sort.Biggest) return paths.OrderByDescending(p => new FileInfo(p).Length);
-            if (mode == Enums.Sort.Smallest) return paths.OrderBy(p => new FileInfo(p).Length);
+            if (mode == Enums.Sort.Newest) return paths.OrderByDescending(p => new PathInfo(p).Fsi.LastWriteTime);
+            if (mode == Enums.Sort.Oldest) return paths.OrderBy(p => new PathInfo(p).Fsi.LastWriteTime);
+            if (mode == Enums.Sort.Biggest) return paths.OrderByDescending(p => new PathInfo(p).Size);
+            if (mode == Enums.Sort.Smallest) return paths.OrderBy(p => new PathInfo(p).Size);
             if (mode == Enums.Sort.Longest) return paths.OrderByDescending(p => p.Length);
             if (mode == Enums.Sort.Shortest) return paths.OrderBy(p => p.Length);
-            return paths;
-        }
-
-        /// <summary> Sorts directory paths. Sorting by size is not supported. </summary>
-        public static IEnumerable<string> SortDirs(IEnumerable<string> paths, Enums.Sort mode = Enums.Sort.AToZ)
-        {
-            if (mode == Enums.Sort.None) return paths;
-            if (mode == Enums.Sort.AToZ) return paths.OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
-            if (mode == Enums.Sort.ZToA) return paths.OrderByDescending(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
-            if (mode == Enums.Sort.Newest) return paths.OrderByDescending(d => new DirectoryInfo(d).LastWriteTime);
-            if (mode == Enums.Sort.Oldest) return paths.OrderBy(d => new DirectoryInfo(d).LastWriteTime);
-            if (mode == Enums.Sort.Longest) return paths.OrderByDescending(d => d.Length);
-            if (mode == Enums.Sort.Shortest) return paths.OrderBy(d => d.Length);
+            if (mode == Enums.Sort.Shallowest) return paths.OrderBy(p => GetPathParts(p).Count);
+            if (mode == Enums.Sort.Deepest) return paths.OrderByDescending(p => GetPathParts(p).Count);
             return paths;
         }
 
         /// <summary>
-        /// Get file paths as a sorted string List.
-        /// When recursive is true, maxDepth can be used to limit how deep in the directory structure to search (0 = current directory only, null = no limit).
+        /// Get files as a sorted list using <paramref name="sort"/> and optionally filtered using <paramref name="pattern"/>. <br/>
+        /// When <paramref name="recursive"/> is true, <paramref name="maxDepth"/> can be used to limit how deep in the directory structure to search (0 = current directory only).
         /// </summary>
-        public static List<string> GetFilePaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = 1)
+        public static List<string> GetFilePaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = int.MaxValue)
         {
             try
             {
                 if (path.IsEmpty() || !Directory.Exists(path))
                     return [];
 
+                recursive = recursive || maxDepth < int.MaxValue; // A specified maxDepth implies recursion
                 SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                List<string> paths = SortFiles(Directory.GetFiles(path, pattern, opt), sort).ToList();
-                int rootDepth = GetPathPartCount(Path.GetFullPath(path), false);
-                paths = paths.Where(p => (GetPathPartCount(p, true) - rootDepth) <= maxDepth).ToList();
+                List<string> paths = SortPaths(Directory.GetFiles(path, pattern, opt), sort).ToList();
+                int rootDepth = GetPathParts(Path.GetFullPath(path), false).Count;
+                paths = paths.Where(p => (GetPathParts(p, true).Count - rootDepth) <= maxDepth).ToList();
                 return paths;
             }
             catch (Exception ex)
@@ -77,26 +80,52 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> Get files as a sorted FileInfo List </summary>
-        public static List<FileInfo> GetFiles(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ)
-            => GetFilePaths(path, recursive, pattern, sort).Select(p => Try(() => new FileInfo(p))).ToList();
+        /// <inheritdoc cref="GetFilePaths(string, bool, string, Enums.Sort, int)"/>
+        public static List<FileInfo> GetFiles(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = int.MaxValue)
+            => GetFilePaths(path, recursive, pattern, sort, maxDepth).Select(p => Try(() => new FileInfo(p))).Where(fi => fi != null).ToList();
 
         /// <summary>
-        /// Get directory paths as a sorted string List.
-        /// When recursive is true, maxDepth can be used to limit how deep in the directory structure to search (0 = current directory only).
+        /// Get directories as a sorted list using <paramref name="sort"/> and optionally filtered using <paramref name="pattern"/>. <br/>
+        /// When <paramref name="recursive"/> is true, <paramref name="maxDepth"/> can be used to limit how deep in the directory structure to search (0 = current directory only).
         /// </summary>
-        public static List<string> GetDirPaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = 1)
+        public static List<string> GetDirPaths(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = int.MaxValue)
         {
+            recursive = recursive || maxDepth < int.MaxValue; // A specified maxDepth implies recursion
+
             try
             {
                 if (path.IsEmpty() || !Directory.Exists(path))
                     return [];
 
-                SearchOption opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                List<string> paths = SortDirs(Directory.GetDirectories(path, pattern, opt), sort).ToList();
-                int rootDepth = GetPathPartCount(Path.GetFullPath(path), false);
-                paths = paths.Where(p => (GetPathPartCount(p, false) - rootDepth) <= maxDepth).ToList(); // For directories, include the directory name in depth calculation (excludeFile: false)
-                return paths;
+                if (!recursive)
+                    return SortPaths(Directory.GetDirectories(path, pattern, SearchOption.TopDirectoryOnly), sort).ToList();
+
+                var paths = new List<string>();
+                var pending = new Stack<(string Path, int Depth)>();
+                pending.Push((path, 0));
+
+                while (pending.Count > 0)
+                {
+                    var (currentDir, depth) = pending.Pop();
+
+                    if (depth > maxDepth)
+                        continue;
+
+                    try
+                    {
+                        foreach (var subDir in Directory.GetDirectories(currentDir, pattern))
+                        {
+                            paths.Add(subDir);
+                            if (depth < maxDepth)
+                            {
+                                pending.Push((subDir, depth + 1));
+                            }
+                        }
+                    }
+                    catch (UnauthorizedAccessException) { /* Ignore and continue */ }
+                }
+
+                return SortPaths(paths, sort).ToList();
             }
             catch (Exception ex)
             {
@@ -105,66 +134,9 @@ namespace NmkdUtils
             }
         }
 
-        /// <summary> Get directories sorted by name (manual recursion to ignore inaccessible entries) </summary>
-        public static DirectoryInfo[] GetDirInfosSorted(string root, bool recursive = false, string pattern = "*", bool noWarnings = true)
-            => GetDirInfosSorted(root, recursive ? int.MaxValue : 1, pattern, noWarnings);
-
-        /// <summary>
-        /// Get directories in <paramref name="root"/>, filtered with wildcard <paramref name="pattern"/>, sorted by name, with a maximum recursion depth <paramref name="maxDepth"/> (0 = No recursion).<br/>
-        /// </summary>
-        public static DirectoryInfo[] GetDirInfosSorted(string root, int maxDepth = 128, string pattern = "*", bool noWarnings = true)
-        {
-            // Guard clause: if root is invalid or doesn't exist, return empty
-            if (root.IsEmpty() || !Directory.Exists(root))
-                return [];
-
-            var directories = new List<DirectoryInfo>();
-
-            // Use a stack to track directories along with their current depth
-            var pending = new Stack<(string Path, int Depth)>();
-            pending.Push((root, 0));
-
-            while (pending.Count > 0)
-            {
-                var (currentDir, depth) = pending.Pop();
-
-                try
-                {
-                    // Add current directory info to the list
-                    if (depth > 0)
-                        directories.Add(new DirectoryInfo(currentDir));
-
-                    if (depth >= maxDepth)
-                        continue;
-
-                    // Add subdirectories to the stack
-                    foreach (var directory in Directory.GetDirectories(currentDir, pattern))
-                    {
-                        pending.Push((directory, depth + 1));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (!noWarnings)
-                    {
-                        Logger.LogWrn($"{nameof(GetDirInfosSorted)} - {currentDir}: {ex.Message}");
-                    }
-                }
-            }
-
-            // Sort the directories by name and return
-            return directories.OrderBy(d => d.Name).ToArray();
-        }
-
-        public static int GetPathPartCount(string path, bool excludeFile)
-        {
-            if (path.IsEmpty())
-                return 0;
-
-            path = path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
-            int count = path.Split('/').Where(s => s.IsNotEmpty()).Count();
-            return excludeFile ? count - 1 : count;
-        }
+        /// <inheritdoc cref="GetDirPaths(string, bool, string, Enums.Sort, int)"/>
+        public static List<DirectoryInfo> GetDirs(string path, bool recursive = false, string pattern = "*", Enums.Sort sort = Enums.Sort.AToZ, int maxDepth = int.MaxValue)
+            => GetDirPaths(path, recursive, pattern, sort, maxDepth).Select(p => Try(() => new DirectoryInfo(p))).Where(di => di != null).ToList();
 
         /// <summary> Sends a file to the recycle bin. Returns success bool. </summary>
         private static bool RecycleFile(string path, bool logEx = false)
