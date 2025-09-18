@@ -291,14 +291,16 @@ namespace NmkdUtils
         }
 
         /// <summary> Count amount of items of any IEnumerable, get current item using IndexOf and return a string like "3/10". </summary>
-        public static string IterationProgress<T>(IEnumerable<T> items, T currentItem, bool brackets = false)
+        public static string IterationProgress<T>(IEnumerable<T> items, T currentItem, bool brackets = false, bool printItem = false)
         {
             // Check if IENumerable is ICollection to avoid multiple enumeration, then get count
             int total = items is ICollection<T> coll ? coll.Count : items.Count();
             // Check if IEnumerable is IList to avoid ToList(), then get index of current item
             int currentIndex = items is IList<T> list ? list.IndexOf(currentItem) : items.ToList().IndexOf(currentItem);
             string s = $"{currentIndex + 1}/{total}";
-            return brackets ? $"[{s}]" : s;
+            s = brackets ? $"[{s}]" : s;
+            s = printItem ? $"{s} {currentItem}" : s;
+            return s;
         }
     }
 }
