@@ -508,10 +508,12 @@ namespace NmkdUtils
         public static bool MatchesWildcard(this string s, string pattern, bool ignoreCase = true, bool orContains = false)
         {
             // If the pattern contains no wildcards, we use a simple Contains() check, if allowed by the parameters
-            if (orContains && !s.Contains('*') && !s.Contains('?'))
+            if (orContains && (!s.Contains('*') && !s.Contains('?')))
                 return s.Contains(pattern, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-            return StringUtils.WildcardMatch(pattern, s, 0, 0, ignoreCase);
+            bool match = StringUtils.WildcardMatch(pattern, s, 0, 0, ignoreCase);
+            if(Settings.DebugFeats.Contains(Enums.DebugFeats.Wildcard)) Logger.Log($"String '{s.SquashLines(" ⏎ ")}' {(match ? "matches" : "does not match")} pattern '{pattern}'", color: ConsoleColor.DarkGreen);
+            return match;
         }
 
         /// <summary> Checks if a string matches all of the provided wildcard <paramref name="patterns"/> </summary>
@@ -688,9 +690,9 @@ namespace NmkdUtils
 
         /// <summary>
         /// Extended Replace method, does not error if <paramref name="find"/> is empty, can be case-insensitive with <paramref name="ci"/>, <br/>
-        /// can replace only the first occurence with <paramref name="firstOnly"/>.
+        /// can replace only the first occurence with <paramref name="firstOnly"/> or the last occurence with <paramref name="lastOnly"/>.
         /// </summary>
-        public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false, bool fullWord = false)
+        public static string Replace(this string s, string find, string replace = "", bool ci = false, bool firstOnly = false, bool lastOnly = false, bool fullWord = false)
         {
             if (s.IsEmpty(false) || find.IsEmpty(false))
                 return s;
@@ -698,13 +700,32 @@ namespace NmkdUtils
             if (fullWord)
             {
                 var rgx = new Regex($@"\b{Regex.Escape(find)}\b", ci ? RegexOptions.IgnoreCase : RegexOptions.None);
+
+                if (lastOnly)
+                {
+                    var matches = rgx.Matches(s);
+                    if (matches.Count == 0)
+                        return s;
+                    var m = matches[matches.Count - 1];
+                    return string.Concat(s.AsSpan(0, m.Index), replace, s.AsSpan(m.Index + m.Length));
+                }
+
                 return rgx.Replace(s, replace, count: firstOnly ? 1 : int.MaxValue);
             }
 
+            if (lastOnly)
+            {
+                var comparison = ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                int idx = s.LastIndexOf(find, comparison);
+                if (idx < 0)
+                    return s;
+                return string.Concat(s.AsSpan(0, idx), replace, s.AsSpan(idx + find.Length));
+            }
+
             if (firstOnly)
-                return s.ReplaceFirst(find, replace, caseIns: true);
-            else
-                return s.Replace(find, replace, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                return s.ReplaceFirst(find, replace, caseIns: true); // preserves your original behavior
+
+            return s.Replace(find, replace, ci ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
 
         private static string TrimSide(this string s, string trimStr, bool ci, bool fromStart)

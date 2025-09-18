@@ -6,5 +6,6 @@
 
         private static readonly Lazy<Dictionary<string, string>> _commandPathsLazy = new(() => CommandPathsProvider?.Invoke() ?? new());
         public static Dictionary<string, string> CommandPaths => _commandPathsLazy.Value;
+        public static List<Enums.DebugFeats> DebugFeats { get; set; } = [];
     }
 }
