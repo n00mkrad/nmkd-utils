@@ -37,13 +37,16 @@ namespace NmkdUtils
         /// <summary> Text in brackets trailing colons </summary>
         public static readonly Regex TextInBracketsColon = new(@"\[(.*?)\]:?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Text in brackets; if there is leading space, it gets included </summary>
+        /// <summary> Text in brackets; if there is leading whitespace, it gets included </summary>
         public static readonly Regex TextInBracketsWithOptLeadingSpace = new(@"(?s)\s?\[(.*?)\](?:\s(?=:))?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
+        /// <summary> Text in brackets; also consumes leading spaces and trailing colons and/or spaces </summary>
+        public static readonly Regex TextInBracketsSdh = new(@"(?s) *\[(.*?)\](?: |: )?", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        /// <summary> Text in parentheses (incl. brackets) including leading space </summary>
         public static readonly Regex TextInParenthesesLeadingSpaces = new(@"\s*\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-        /// <summary> Text in parentheses (incl. parentheses) including leading space </summary>
+        /// <summary> Text in parentheses (incl. brackets) including leading space </summary>
         public static readonly Regex TextInParentheses = new(@"\([^()]*\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         /// <summary> Speaker name in SDH subtitles. Handles edge cases with lowercase letters like "McGREGOR", "DiCAPRIO" or apostrophes like O'CONNOR. Also matches if there's "-" or "- " before the name. </summary>
