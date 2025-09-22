@@ -504,9 +504,12 @@ namespace NmkdUtils
             return s.Trim().TrimEnd('\\').TrimEnd('/');
         }
 
-        /// <summary> Checks if a string matches a wildcard <paramref name="pattern"/> </summary>
-        public static bool MatchesWildcard(this string s, string pattern, bool ignoreCase = true, bool orContains = false)
+        /// <summary> Checks if a string matches a wildcard <paramref name="pattern"/>. If the input string is empty, <paramref name="valueIfEmpty"/> is returned. </summary>
+        public static bool MatchesWildcard(this string s, string pattern, bool ignoreCase = true, bool orContains = false, bool valueIfEmpty = false)
         {
+            if (s.IsEmpty())
+                return valueIfEmpty;
+
             // If the pattern contains no wildcards, we use a simple Contains() check, if allowed by the parameters
             if (orContains && (!s.Contains('*') && !s.Contains('?')))
                 return s.Contains(pattern, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -516,11 +519,13 @@ namespace NmkdUtils
             return match;
         }
 
-        /// <summary> Checks if a string matches all of the provided wildcard <paramref name="patterns"/> </summary>
-        public static bool MatchesAllWildcards(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
-        /// <summary> Checks if a string matches any of the provided wildcard <paramref name="patterns"/> </summary>
-        public static bool MatchesAnyWildcard(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false) => patterns.Any(p => s.MatchesWildcard(p, ignoreCase, orContains));
-        /// <inheritdoc cref="MatchesAnyWildcard(string, IEnumerable{string}, bool, bool)"/>
+        /// <summary> Checks if a string matches all of the provided wildcard <paramref name="patterns"/>. If no patterns are provided, <paramref name="emptyValue"/> is returned. </summary>
+        public static bool MatchesAllWildcards(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false, bool emptyValue = false)
+            => patterns.None() ? emptyValue : patterns.All(p => s.MatchesWildcard(p, ignoreCase, orContains));
+        /// <summary> Checks if a string matches any of the provided wildcard <paramref name="patterns"/>. If no patterns are provided, <paramref name="emptyValue"/> is returned. </summary>
+        public static bool MatchesAnyWildcard(this string s, IEnumerable<string> patterns, bool ignoreCase = true, bool orContains = false, bool emptyValue = false)
+            => patterns.None() ? emptyValue : patterns.Any(p => s.MatchesWildcard(p, ignoreCase, orContains));
+        /// <inheritdoc cref="MatchesAnyWildcard(string, IEnumerable{string}, bool, bool, bool)"/>
         public static bool MatchesAnyWildcard(this string s, params string[] patterns) => patterns.Any(p => s.MatchesWildcard(p));
 
         /// <summary> Capitalizes the first char of a string. </summary>

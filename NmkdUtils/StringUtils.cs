@@ -1,9 +1,5 @@
-﻿
-
-using System.Collections.Frozen;
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace NmkdUtils
 {
@@ -37,41 +33,49 @@ namespace NmkdUtils
         /// <summary> Optimized version based on https://github.com/picrap/WildcardMatch </summary>
         public static bool WildcardMatch(string wildcard, ReadOnlySpan<char> s, int wildcardIndex, int sIndex, bool ignoreCase)
         {
-            while (true)
+            try
             {
-                // Check if we are at the end of the wildcard string
-                if (wildcardIndex == wildcard.Length)
-                    return sIndex == s.Length;
-
-                char c = wildcard[wildcardIndex];
-                switch (c)
+                while (true)
                 {
-                    case '?':
-                        // Match any single character
-                        break;
-                    case '*':
-                        // If this is the last wildcard char, match any sequence including empty
-                        if (wildcardIndex == wildcard.Length - 1)
-                            return true;
+                    // Check if we are at the end of the wildcard string
+                    if (wildcardIndex == wildcard.Length)
+                        return sIndex == s.Length;
 
-                        // Try to match the rest of the pattern after the asterisk with any part of the remaining string
-                        for (int i = sIndex; i < s.Length; i++)
-                        {
-                            if (WildcardMatch(wildcard, s.Slice(i), wildcardIndex + 1, 0, ignoreCase))
+                    char c = wildcard[wildcardIndex];
+                    switch (c)
+                    {
+                        case '?':
+                            // Match any single character
+                            break;
+                        case '*':
+                            // If this is the last wildcard char, match any sequence including empty
+                            if (wildcardIndex == wildcard.Length - 1)
                                 return true;
-                        }
-                        return false;
-                    default:
-                        // Check character match taking into account the ignoreCase parameter
-                        char wildcardChar = ignoreCase ? char.ToLower(c) : c;
-                        if (sIndex == s.Length || (ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex]) != wildcardChar)
-                            return false;
-                        break;
-                }
 
-                // Move to the next character in both strings
-                wildcardIndex++;
-                sIndex++;
+                            // Try to match the rest of the pattern after the asterisk with any part of the remaining string
+                            for (int i = sIndex; i < s.Length; i++)
+                            {
+                                if (WildcardMatch(wildcard, s.Slice(i), wildcardIndex + 1, 0, ignoreCase))
+                                    return true;
+                            }
+                            return false;
+                        default:
+                            // Check character match taking into account the ignoreCase parameter
+                            char wildcardChar = ignoreCase ? char.ToLower(c) : c;
+                            if (sIndex == s.Length || (ignoreCase ? char.ToLower(s[sIndex]) : s[sIndex]) != wildcardChar)
+                                return false;
+                            break;
+                    }
+
+                    // Move to the next character in both strings
+                    wildcardIndex++;
+                    sIndex++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(ex, $"Failed to perform wildcard matching. Pattern: '{wildcard}', String: '{s}'");
+                return false;
             }
         }
 
