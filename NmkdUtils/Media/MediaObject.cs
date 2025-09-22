@@ -159,6 +159,12 @@ namespace NmkdUtils.Media
             entries.Insert(0, new Logger.Entry(File.Name));
             entries.Insert(1, new Logger.Entry(format ? $" {Format}" : Format) { CustomColor = format ? ConsoleColor.White : null });
             entries.ForEach(e => Logger.Log(e));
+
+            if (Format.Chapters.Any())
+            {
+                Logger.Log($" {Format.Chapters.Count} Chapters: {Format.Chapters.Select(c => $"'{c.Title}'".Replace("''", "Untitled")).Join().Trunc(150)}", color: ConsoleColor.Cyan);
+            }
+            
             Logger.Log("", condition: () => addEmptyLine); // Add an empty line after each file
         }
     }
