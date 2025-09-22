@@ -81,11 +81,14 @@ namespace NmkdUtils
         public static void TryNoWait(Action tryAction, Action<Exception>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false) =>
             Task.Run(() => Try(tryAction, catchAction, logEx, errNote, logTrace));
 
+        /// <summary>
         /// <inheritdoc cref="Try(Action, Action{Exception}, bool?, string, bool)"/>
-        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false)
+        /// If an exception occurs and <paramref name="catchAction"/> is null, <paramref name="fallback"/> will be returned.
+        /// </summary>
+        public static TResult Try<TResult>(Func<TResult> tryAction, Func<Exception, TResult>? catchAction = null, bool? logEx = null, string errNote = "", bool logTrace = false, TResult? fallback = default)
         {
             if (tryAction == null)
-                return default;
+                return fallback;
 
             try
             {
@@ -102,7 +105,7 @@ namespace NmkdUtils
                     return catchAction(ex);
             }
 
-            return default;
+            return fallback;
         }
 
         /// <summary>
