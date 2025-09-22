@@ -3,49 +3,68 @@ using Newtonsoft.Json.Linq;
 using NmkdUtils.Structs;
 using System.Drawing;
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Runtime.Serialization;
+using static NmkdUtils.CodeUtils;
 using static NmkdUtils.Media.MediaData;
 
 namespace NmkdUtils.Media
 {
     public class Stream
     {
-        public int Index { get; set; } = -1;
-        public CodecType Type { get; set; }
-        public string Codec { get; set; } = "";
-        public string CodecLong { get; set; } = "";
-        public Dictionary<string, string> Values { get; set; } = [];
-        public Dictionary<string, int> Disposition { get; set; } = [];
-        public Dictionary<string, string> Tags { get; set; } = [];
-        public List<Dictionary<string, string>> SideData { get; set; } = [];
-        [JsonIgnore] public TimeSpan Duration => Values.Get("duration", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : FfmpegUtils.GetTimespanFromFfprobe(Tags);
-        [JsonIgnore] public TimeSpan StartTime => Values.Get("start_time", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : new TimeSpan();
-        [JsonIgnore] public int KbpsDemuxed { get; set; } = 0;
-        [JsonIgnore] public string Title => Tags.GetStr("title");
-        [JsonIgnore] public int Kbps => (Values.GetStr("bit_rate").IsNotEmpty() ? Values.Get("bit_rate").GetInt() : Tags.Get("BPS").GetInt()) / 1000;
-        [JsonIgnore] public string Language => Tags.GetStr("language");
-        [JsonIgnore] public LanguageUtils.Language? LanguageParsed => LanguageUtils.GetLangByCode(Language);
-        [JsonIgnore] public DateTime CreationTime => DateTime.Parse(Tags.GetStr("creation_time"), null, DateTimeStyles.RoundtripKind);
-        [JsonIgnore] public bool Default => Disposition.Get("default") == 1;
-        [JsonIgnore] public string CodecFriendly => Aliases.GetFriendlyCodecName(Codec);
+        [JsonIgnore] public int Index = -1;
+        [JsonIgnore] public CodecType Type = CodecType.Unknown;
+        [JsonIgnore] public string Codec = "";
+        [JsonIgnore] public string CodecLong = "";
+        [JsonIgnore] public Dictionary<string, string> Values = [];
+        [JsonIgnore] public Dictionary<string, int> Disposition = [];
+        [JsonIgnore] public Dictionary<string, string> Tags = [];
+        [JsonIgnore] public List<Dictionary<string, string>> SideData = [];
+        [JsonIgnore] public TimeSpan Duration;
+        [JsonIgnore] public TimeSpan StartTime;
+        [JsonIgnore] public int KbpsDemuxed = 0;
+        [JsonIgnore] public string Title = "";
+        [JsonIgnore] public int Kbps;
+        [JsonIgnore] public string Language = "";
+        [JsonIgnore] public LanguageUtils.Language? LanguageParsed;
+        [JsonIgnore] public DateTime? CreationTime;
+        [JsonIgnore] public bool Default;
+        [JsonIgnore] public string CodecFriendly = "";
 
         [JsonExtensionData]
-        private IDictionary<string, JToken>? _values = default!;
+        public IDictionary<string, JToken>? JValues = default!;
 
         public Stream() { }
 
-        [JsonConstructor]
-        public Stream(int index, string codec_name, string codec_long_name, string codec_type, Dictionary<string, int> disposition, Dictionary<string, string> tags, List<Dictionary<string, string>> side_data_list)
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
         {
-            Index = index;
-            Codec = codec_name;
-            CodecLong = codec_long_name;
-            Type = Enum.TryParse<CodecType>(codec_type, true, out var result) ? result : CodecType.Unknown;
-            Disposition = disposition;
-            Tags = tags;
-            SideData = side_data_list;
+            LoadValues();
         }
+
+        public void LoadValues(Dictionary<string, JToken>? values = null)
+        {
+            var v = values ?? JValues;
+            Values = v.Where(v => !v.Key.IsOneOf("tags", "disposition", "side_data_list")).ToDictionary(kvp => kvp.Key, kvp => $"{kvp.Value}");
+            Tags = v.GetEntryAs<Dictionary<string, string>>("tags", []);
+            Disposition = v.GetEntryAs<Dictionary<string, int>>("disposition", []);
+            SideData = v.GetEntryAs<List<Dictionary<string, string>>>("side_data_list", []);
+            Index = Values.Get("index").GetInt();
+            Codec = Values.Get("codec_name");
+            CodecLong = Values.Get("codec_long_name");
+            Type = Enum.TryParse<CodecType>(Values.Get("codec_type"), true, out var result) ? result : CodecType.Unknown;
+            Duration = Values.Get("duration", out var dur) ? TimeSpan.FromSeconds(dur.GetFloat()) : FfmpegUtils.GetTimespanFromFfprobe(Tags);
+            StartTime = Values.Get("start_time", out var startTime) ? TimeSpan.FromSeconds(startTime.GetFloat()) : new TimeSpan();
+            Title = Tags.GetStr("title");
+            Kbps = (Values.GetStr("bit_rate").IsNotEmpty() ? Values.Get("bit_rate").GetInt() : Tags.Get("BPS").GetInt()) / 1000;
+            Language = Tags.GetStr("language");
+            LanguageParsed = LanguageUtils.GetLangByCode(Language);
+            string creationTimeStr = Tags.GetStr("creation_time");
+            CreationTime = creationTimeStr.IsEmpty() ? null : Try(() => DateTime.Parse(creationTimeStr, null, DateTimeStyles.RoundtripKind), errNote: $"Failed to parse media creation time {creationTimeStr}", fallback: (DateTime?)null);
+            Default = Disposition.Get("default") == 1;
+            CodecFriendly = Aliases.GetFriendlyCodecName(Codec);
+        }
+
+        public override string ToString() => Print();
 
         public int GetRelativeIndex(MediaObject parent)
         {
@@ -54,11 +73,6 @@ namespace NmkdUtils.Media
             else if (Type == CodecType.Subtitle) return parent.SubStreams.IndexOf((SubtitleStream)this);
             return -1;
         }
-
-        [OnDeserialized]
-        private void OnDeserialized(StreamingContext context) => Values = _values.ToDictionary(kvp => kvp.Key, kvp => $"{kvp.Value}");
-
-        public override string ToString() => Print();
 
         public string Print(MediaObject? parentMedia = null, bool padCodec = false)
         {
@@ -117,9 +131,8 @@ namespace NmkdUtils.Media
 
             bool videoIsAttachment = Type == CodecType.Video && Tags.Get("filename").IsNotEmpty();
 
-            if (Type == CodecType.Video && !videoIsAttachment)
+            if (this is VideoStream v && !videoIsAttachment)
             {
-                var v = new VideoStream(this);
                 infos.Add(Aliases.GetFriendlyCodecName(Codec, v.Profile).PadRight(codecPadding));
                 infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                 infos.Add(v.Sar.IsNotEmpty() && v.Sar != "1:1" ? $"{v.Width}x{v.Height} -> {v.ScaledRes.ToStr()}" : $"{v.Width}x{v.Height}");
@@ -128,7 +141,6 @@ namespace NmkdUtils.Media
                 infos.Add(v.Color.IsHdr ? "HDR" : "");
                 infos.Add(v.DoviProfile > 0 ? $"Dolby Vision (P{v.DoviProfile})" : "");
                 infos.Add(v.Hdr10Plus ? $"HDR10+" : "");
-                // infos.Add($"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS{(v.AvgFps.Float.EqualsRoughly(v.Fps.Float, 4.0f) ? "" : $" (est. {v.AvgFps.Float.ToString("0.########")})")}");
                 infos.Add(v.SeemsVfr ? $"{v.AvgFps.Float.ToString("0.########")} FPS (Specified: {v.Fps})" : $"{v.Fps.GetString("0.###")}{(v.Fps.Denominator != 1 ? $" ({v.Fps})" : "")} FPS");
                 infos.Add(v.Values.Get("closed_captions") == "1" ? "Closed Captions" : "");
                 infos.Add(v.Values.Get("film_grain") == "1" ? "Film Grain" : "");
@@ -136,9 +148,8 @@ namespace NmkdUtils.Media
                 infos.Add(v.Dar.IsNotEmpty() ? $"DAR {v.Dar}" : "");
                 infos.Add(v.Tags.Get("filename", out var fname, "") ? $"'{fname}'" : "");
             }
-            else if (Type == CodecType.Audio)
+            else if (this is AudioStream a)
             {
-                var a = new AudioStream(this);
                 infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile).PadRight(codecPadding));
                 infos.Add(a.Profile.Contains("Atmos") ? "Dolby Atmos" : "");
                 infos.Add(lang == null ? "" : lang.Name);
@@ -148,9 +159,8 @@ namespace NmkdUtils.Media
                 infos.Add(FormatUtils.Media.AudioLayout(a.ChannelLayout, FormatUtils.Media.LayoutStringFormat.Prettier));
                 infos.Add($"{(a.SampleRate / 1000).ToString("0.0###")} kHz");
             }
-            else if (Type == CodecType.Subtitle)
+            else if (this is SubtitleStream s)
             {
-                var s = new SubtitleStream(this);
                 infos.Add(Aliases.GetFriendlyCodecName(Codec).PadRight(codecPadding));
                 infos.Add(lang == null ? "" : lang.Name);
                 infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
@@ -158,14 +168,13 @@ namespace NmkdUtils.Media
                 infos.Add(s.Forced ? "Forced" : "");
                 infos.Add(s.Sdh ? "SDH" : "");
             }
-            else if (Type == CodecType.Data)
+            else if (this is DataStream d)
             {
-                var d = new DataStream(this);
                 infos.Add(d.HandlerName.IsEmpty() ? d.CodecTagString.Up() : $"{d.CodecTagString.Up()} ({d.HandlerName})");
             }
-            else if (Type == CodecType.Attachment || videoIsAttachment)
+            else if (this is VideoStream or AttachmentStream || videoIsAttachment)
             {
-                var at = new AttachmentStream(this);
+                var at = (AttachmentStream)this;
                 infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename} ({at.MimeType})");
             }
 
@@ -196,7 +205,7 @@ namespace NmkdUtils.Media
 
         public VideoStream(Stream s)
         {
-            s.CopyData(this);
+            LoadValues(new Dictionary<string, JToken>(s.JValues));
             // Color
             Color = new ColorInfo(Values.Get("color_space"), Values.Get("color_transfer"), Values.Get("color_primaries"), Values.Get("color_range", "tv") != "tv");
             PixFmt = Values.Get("pix_fmt");
@@ -238,16 +247,16 @@ namespace NmkdUtils.Media
 
     public class AudioStream : Stream
     {
-        public string Profile { get; private set; } = "";
-        public string SampleFmt { get; private set; } = "";
-        public int SampleRate { get; private set; } = 0;
-        public int Channels { get; private set; } = 0;
-        public string ChannelLayout { get; private set; } = "";
-        public bool Atmos { get; private set; } = false;
+        public string Profile = "";
+        public string SampleFmt = "";
+        public int SampleRate = 0;
+        public int Channels = 0;
+        public string ChannelLayout = "";
+        public bool Atmos = false;
 
         public AudioStream(Stream s)
         {
-            s.CopyData(this);
+            LoadValues(new Dictionary<string, JToken>(s.JValues));
             Profile = Values.Get("profile");
             SampleFmt = Values.Get("sample_fmt");
             SampleRate = Values.Get("sample_rate").GetInt();
@@ -259,16 +268,16 @@ namespace NmkdUtils.Media
 
     public class SubtitleStream : Stream
     {
-        public int Frames { get; private set; }
-        public bool ForcedFlag { get; private set; }
-        public bool Forced { get; private set; }
-        public bool SdhFlag { get; private set; }
-        public bool Sdh { get; private set; }
-        public bool TextBased { get; private set; }
+        public int Frames;
+        public bool ForcedFlag;
+        public bool Forced;
+        public bool SdhFlag;
+        public bool Sdh;
+        public bool TextBased;
 
         public SubtitleStream(Stream s)
         {
-            s.CopyData(this);
+            LoadValues(new Dictionary<string, JToken>(s.JValues));
             Frames = Tags?.FirstOrDefault(t => t.Key.StartsWith("NUMBER_OF_FRAMES"), new()).Value.GetInt() ?? 0;
             ForcedFlag = Disposition.Get("forced") == 1;
             Forced = ForcedFlag || Title.ContainsCi("forced");
@@ -280,12 +289,12 @@ namespace NmkdUtils.Media
 
     public class AttachmentStream : Stream
     {
-        public string Filename { get; private set; } = "";
-        public string MimeType { get; private set; } = "";
+        public string Filename = "";
+        public string MimeType = "";
 
         public AttachmentStream(Stream s)
         {
-            s.CopyData(this);
+            LoadValues(new Dictionary<string, JToken>(s.JValues));
             Filename = Tags.Get("filename");
             MimeType = Tags.Get("mimetype");
         }
@@ -293,12 +302,12 @@ namespace NmkdUtils.Media
 
     public class DataStream : Stream
     {
-        public string CodecTagString { get; private set; } = "";
-        public string HandlerName { get; private set; } = "";
+        public string CodecTagString = "";
+        public string HandlerName = "";
 
         public DataStream(Stream s)
         {
-            s.CopyData(this);
+            LoadValues(new Dictionary<string, JToken>(s.JValues));
             CodecTagString = Values.Get("codec_tag_string");
             HandlerName = Tags.Get("handler_name");
         }

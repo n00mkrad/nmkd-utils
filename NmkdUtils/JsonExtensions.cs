@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using static NmkdUtils.Enums;
 
@@ -65,6 +66,22 @@ namespace NmkdUtils
             settings.Converters.Add(new StringEnumConverter());
 
             return JsonConvert.SerializeObject(o, indent ? Formatting.Indented : Formatting.None, settings);
+        }
+
+        /// <summary>
+        /// Gets <typeparamref name="T"/> from a JObject entry in the dictionary. <br/> If the key is missing, not a JObject, or conversion fails, returns <paramref name="fallback"/>.
+        /// </summary>
+        public static T GetEntryAs<T>(this IDictionary<string, JToken> values, string key, T fallback = default!, JsonSerializerSettings? settings = null)
+        {
+            if (key != null && values != null && values.TryGetValue(key, out var token) && token is JObject obj)
+            {
+                var serializer = settings is null ? JsonSerializer.CreateDefault() : JsonSerializer.Create(settings);
+                var result = obj.ToObject<T>(serializer);
+                if (result is not null)
+                    return result;
+            }
+
+            return fallback;
         }
     }
 }
