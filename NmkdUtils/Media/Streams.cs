@@ -29,20 +29,23 @@ namespace NmkdUtils.Media
         [JsonIgnore] public DateTime? CreationTime;
         [JsonIgnore] public bool Default;
         [JsonIgnore] public string CodecFriendly = "";
+        [JsonIgnore] public Dictionary<string, JToken> JValues = [];
 
         [JsonExtensionData]
-        public IDictionary<string, JToken>? JValues = default!;
+        private IDictionary<string, JToken>? _values = default!;
 
         public Stream() { }
 
         [OnDeserialized]
         private void OnDeserialized(StreamingContext context)
         {
+            JValues = _values == null ? [] : new Dictionary<string, JToken>(_values);
             LoadValues();
         }
 
         public void LoadValues(Dictionary<string, JToken>? values = null)
         {
+            JValues = values != null && values.Any() ? values : JValues;
             var v = values ?? JValues;
             Values = v.Where(v => !v.Key.IsOneOf("tags", "disposition", "side_data_list")).ToDictionary(kvp => kvp.Key, kvp => $"{kvp.Value}");
             Tags = v.GetEntryAs<Dictionary<string, string>>("tags", []);
@@ -151,13 +154,13 @@ namespace NmkdUtils.Media
             else if (this is AudioStream a)
             {
                 infos.Add(Aliases.GetFriendlyCodecName(Codec, a.Profile).PadRight(codecPadding));
-                infos.Add(a.Profile.Contains("Atmos") ? "Dolby Atmos" : "");
                 infos.Add(lang == null ? "" : lang.Name);
                 infos.Add(Title.IsNotEmpty() ? $"'{Title.Trunc(maxTitleChars)}'" : "");
                 infos.Add(GetBitrateStr(a));
+                infos.Add(a.Profile.Contains("Atmos") ? "Dolby Atmos" : "");
                 infos.Add($"{a.Channels} Channels");
                 infos.Add(FormatUtils.Media.AudioLayout(a.ChannelLayout, FormatUtils.Media.LayoutStringFormat.Prettier));
-                infos.Add($"{(a.SampleRate / 1000).ToString("0.0###")} kHz");
+                infos.Add($"{(a.SampleRate / 1000).ToString("0.###")} kHz");
             }
             else if (this is SubtitleStream s)
             {
@@ -172,13 +175,17 @@ namespace NmkdUtils.Media
             {
                 infos.Add(d.HandlerName.IsEmpty() ? d.CodecTagString.Up() : $"{d.CodecTagString.Up()} ({d.HandlerName})");
             }
-            else if (this is VideoStream or AttachmentStream || videoIsAttachment)
+            else if (this is AttachmentStream at)
             {
-                var at = (AttachmentStream)this;
                 infos.Add(at.MimeType.IsEmpty() ? at.Filename : $"{at.Filename} ({at.MimeType})");
             }
+            else if (this is VideoStream attv && videoIsAttachment)
+            {
+                var vAtt = new AttachmentStream(attv);
+                infos.Add(vAtt.MimeType.IsEmpty() ? vAtt.Filename : $"{vAtt.Filename} ({vAtt.MimeType})");
+            }
 
-            return $"{str} {string.Join(", ", infos.Where(s => s.IsNotEmpty()))}";
+            return $"{str} {infos.Where(s => s.IsNotEmpty()).Join()}";
         }
     }
 
